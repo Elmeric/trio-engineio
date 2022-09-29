@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "trio-engineio"
+version = "0.1.0"
+description = ""
+authors = ["Eric Lemoine <erik.lemoine@gmail.com>"]
+readme = "README.md"
+packages = [{include = "trio_engineio", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+trio = "^0.22.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
