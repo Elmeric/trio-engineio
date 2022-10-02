@@ -9,6 +9,8 @@ packages = [{include = "trio_engineio", from = "src"}]
 [tool.poetry.dependencies]
 python = "^3.10"
 trio = "^0.22.0"
+httpcore = "^0.15.0"
+trio-websocket = "^0.9.2"
 
 
 [build-system]

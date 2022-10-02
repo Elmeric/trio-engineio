@@ -1,8 +1,6 @@
-import six
+import urllib.parse
 
 from . import packet
-
-from six.moves import urllib
 
 
 class Payload(object):
@@ -26,7 +24,7 @@ class Payload(object):
             else:
                 binary_len = b''
                 while packet_len != 0:
-                    binary_len = six.int2byte(packet_len % 10) + binary_len
+                    binary_len = bytes((packet_len % 10,)) + binary_len
                     packet_len = int(packet_len / 10)
                 if not pkt.binary:
                     encoded_payload += b'\0'
@@ -54,16 +52,15 @@ class Payload(object):
                 encoded_payload)[b'd'][0]
 
         i = 0
-        if six.byte2int(encoded_payload[0:1]) <= 1:
+        if encoded_payload[0:1][0] <= 1:
             # binary encoding
             while i < len(encoded_payload):
                 if len(self.packets) >= self.max_decode_packets:
                     raise ValueError('Too many packets in payload')
                 packet_len = 0
                 i += 1
-                while six.byte2int(encoded_payload[i:i + 1]) != 255:
-                    packet_len = packet_len * 10 + six.byte2int(
-                        encoded_payload[i:i + 1])
+                while encoded_payload[i:i + 1][0] != 255:
+                    packet_len = packet_len * 10 + encoded_payload[i:i + 1][0]
                     i += 1
                 self.packets.append(packet.Packet(
                     encoded_packet=encoded_payload[i + 1:i + 1 + packet_len]))

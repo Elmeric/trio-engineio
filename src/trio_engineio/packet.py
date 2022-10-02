@@ -1,12 +1,10 @@
 import base64
 import json as _json
 
-import six
-
 (OPEN, CLOSE, PING, PONG, MESSAGE, UPGRADE, NOOP) = (0, 1, 2, 3, 4, 5, 6)
 packet_names = ['OPEN', 'CLOSE', 'PING', 'PONG', 'MESSAGE', 'UPGRADE', 'NOOP']
 
-binary_types = (six.binary_type, bytearray)
+binary_types = (bytes, bytearray)
 
 
 class Packet(object):
@@ -20,9 +18,9 @@ class Packet(object):
         self.data = data
         if binary is not None:
             self.binary = binary
-        elif isinstance(data, six.text_type):
+        elif isinstance(data, str):
             self.binary = False
-        elif isinstance(data, binary_types):
+        elif isinstance(data, (bytes, bytearray)):
             self.binary = True
         else:
             self.binary = False
@@ -32,9 +30,9 @@ class Packet(object):
     def encode(self, b64=False, always_bytes=True):
         """Encode the packet for transmission."""
         if self.binary and not b64:
-            encoded_packet = six.int2byte(self.packet_type)
+            encoded_packet = bytes((self.packet_type,))
         else:
-            encoded_packet = six.text_type(self.packet_type)
+            encoded_packet = str(self.packet_type)
             if self.binary and b64:
                 encoded_packet = 'b' + encoded_packet
         if self.binary:
@@ -42,7 +40,7 @@ class Packet(object):
                 encoded_packet += base64.b64encode(self.data).decode('utf-8')
             else:
                 encoded_packet += self.data
-        elif isinstance(self.data, six.string_types):
+        elif isinstance(self.data, str):
             encoded_packet += self.data
         elif isinstance(self.data, dict) or isinstance(self.data, list):
             encoded_packet += self.json.dumps(self.data,
@@ -60,11 +58,11 @@ class Packet(object):
             encoded_packet = encoded_packet.encode('utf-8')
         elif not isinstance(encoded_packet, bytes):
             encoded_packet = bytes(encoded_packet)
-        self.packet_type = six.byte2int(encoded_packet[0:1])
+        self.packet_type = encoded_packet[0:1][0]
         if self.packet_type == 98:  # 'b' --> binary base64 encoded packet
             self.binary = True
             encoded_packet = encoded_packet[1:]
-            self.packet_type = six.byte2int(encoded_packet[0:1])
+            self.packet_type = encoded_packet[0:1][0]
             self.packet_type -= 48
             b64 = True
         elif self.packet_type >= 48:
