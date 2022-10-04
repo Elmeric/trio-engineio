@@ -61,8 +61,8 @@ async def main():
                 nursery,
                 "http://192.168.0.39:3000",
                 # transports=["websocket"],
-                transports=["polling"],
-                # transports=["polling", "websocket"],
+                # transports=["polling"],
+                transports=["polling", "websocket"],
                 engineio_path="/socket.io"
             )
         except (EngineIoConnectionError, ValueError) as e:

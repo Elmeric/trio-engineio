@@ -111,11 +111,14 @@ class TrioClient:
         self.pong_received = True
         self.http: Optional[httpcore.AsyncConnectionPool] = http_session
         self.ws: Optional[trio_ws.WebSocketConnection] = None
-        self.ping_loop_event = None
+        # self.ping_loop_event = None
         self.send_channel: Optional[trio.MemorySendChannel] = None
         self.receive_channel: Optional[trio.MemoryReceiveChannel] = None
         self.state = "disconnected"
         self.ssl_verify = ssl_verify
+        self._ping_task_scope = None
+        self._write_task_scope = None
+        self._read_task_scope = None
 
         if json is not None:
             packet.Packet.json = json
@@ -259,16 +262,24 @@ class TrioClient:
         """
         if self.state == "connected":
             await self._send_packet(packet.Packet(packet.CLOSE))
-            await self.send_channel.send(None)
+            # self._write_task_scope.cancel()
+            # await self.send_channel.send(None)
             self.state = "disconnecting"
+            self.logger.info("User disconnection: Cancelling ping loop task")
+            self._ping_task_scope.cancel()
+            # self.logger.debug(f"Deadlines: P-{self._ping_task_scope.deadline}, R-{self._read_task_scope.deadline}, W-{self._write_task_scope.deadline}")
+            # self._ping_task_scope.deadline = 0.5
+            # self._read_task_scope.deadline = 0.5
+            # self._write_task_scope.deadline = 0.5
+            # self.logger.debug(f"Deadlines: P-{self._ping_task_scope.deadline}, R-{self._read_task_scope.deadline}, W-{self._write_task_scope.deadline}")
             # await trio.sleep(1)
 
             await self._trigger_event("disconnect", run_async=False)
 
-            if self.current_transport == "websocket":
-                with trio.fail_after(self.request_timeout["connect"]):
-                    await self.ws.aclose()
-                    print(f"!!!!! Websocket closed: {self.ws.closed}")
+            # if self.current_transport == "websocket":
+            #     with trio.fail_after(self.request_timeout["connect"]):
+            #         await self.ws.aclose()
+            #         print(f"!!!!! Websocket closed: {self.ws.closed}")
 
             self.state = "disconnected"
             # await trio.sleep(0)
@@ -277,7 +288,8 @@ class TrioClient:
             except ValueError:  # pragma: no cover
                 pass
 
-        await self._reset()
+        self.sid = None
+        # await self._reset()
 
     def transport(self):
         """Return the name of the transport currently in use.
@@ -300,19 +312,22 @@ class TrioClient:
             #         break
             # if wait_for_response:
             #     await trio.sleep(0.01)
-            await trio.sleep(0.05)
-            print(self.http.connections)
+            # await trio.sleep(1)
+            self.logger.debug(self.http.connections)
             try:
+                self.logger.info("Reset: Closing HTTP connections pool")
                 await self.http.aclose()
             except RuntimeError as e:
-                self.logger.warning(f"Error while closing the HTTP connection pool {e}")
+                self.logger.warning(f"Reset: Error while closing the HTTP connection pool {e}")
+            self.logger.info("Reset: HTTP connections pool closed")
 
         if self.ws and self.ws.closed:
-            print(f"!!!!! Websocket closed: {self.ws.closed}")
+            self.logger.info(f"Reset: Websocket already closed: {self.ws.closed}")
         if self.ws and not self.ws.closed:
-            print("!!!!! Closing websocket")
+            self.logger.info("Reset: Closing websocket")
             with trio.fail_after(self.request_timeout["connect"]):
                 await self.ws.aclose()
+            self.logger.info(f"Reset: Websocket closed: {self.ws.closed}")
 
         self.state = "disconnected"
         self.sid = None
@@ -370,9 +385,12 @@ class TrioClient:
                 # upgrade to websocket succeeded, we're done here
                 return
 
-        nursery.start_soon(self._ping_loop)
-        nursery.start_soon(self._write_loop)
-        nursery.start_soon(self._read_loop_polling)
+        self._ping_task_scope = await nursery.start(self._ping_loop)
+        # nursery.start_soon(self._ping_loop)
+        self._write_task_scope = await nursery.start(self._write_loop)
+        # nursery.start_soon(self._write_loop)
+        self._read_task_scope = await nursery.start(self._read_loop_polling)
+        # nursery.start_soon(self._read_loop_polling)
 
     async def _connect_websocket(self, nursery, url, headers, engineio_path):
         """Establish or upgrade to a WebSocket connection with the server."""
@@ -446,7 +464,10 @@ class TrioClient:
                 raise EngineIoConnectionError(f"Unexpected recv exception: {e}")
 
             open_packet = packet.Packet(encoded_packet=p)
+            # open_packet.packet_type = 3
             if open_packet.packet_type != packet.OPEN:
+                self.ws = ws
+                await self._reset()
                 raise EngineIoConnectionError("no OPEN packet")
 
             self.logger.info(f"WebSocket connection accepted with {open_packet.data}")
@@ -461,9 +482,12 @@ class TrioClient:
             await self._trigger_event("connect", run_async=False)
 
         self.ws = ws
-        nursery.start_soon(self._ping_loop)
-        nursery.start_soon(self._write_loop)
-        nursery.start_soon(self._read_loop_websocket)
+        self._ping_task_scope = await nursery.start(self._ping_loop)
+        # nursery.start_soon(self._ping_loop)
+        self._write_task_scope = await nursery.start(self._write_loop)
+        # nursery.start_soon(self._write_loop)
+        self._read_task_scope = await nursery.start(self._read_loop_websocket)
+        # nursery.start_soon(self._read_loop_websocket)
         return True
 
     async def _receive_packet(self, pkt):
@@ -522,6 +546,7 @@ class TrioClient:
 
     async def _trigger_event(self, event, *args, **kwargs):
         """Invoke an event handler."""
+        self.logger.debug(f"Triggering event: {event}")
         run_async = kwargs.pop("run_async", False)
         if event in self.handlers:
             if inspect.iscoroutinefunction(self.handlers[event]) is True:
@@ -573,69 +598,162 @@ class TrioClient:
             f"{'&' if parsed_url.query else ''}transport={transport}&EIO=3"
         )
 
-    async def _ping_loop(self):
+    async def _ping_loop(self, task_status=trio.TASK_STATUS_IGNORED):
         """This background task sends a PING to the server at the requested
         interval.
         """
-        self.pong_received = True
-        if self.ping_loop_event is None:
-            self.ping_loop_event = trio.Event()
+        with trio.CancelScope() as scope:
+            self.pong_received = True
+            # if self.ping_loop_event is None:
+            #     self.ping_loop_event = trio.Event()
+            task_status.started(scope)
 
-        while self.state == "connected":
-            if not self.pong_received:
-                self.logger.info("PONG response has not been received, aborting")
-                if self.ws:
-                    await self.ws.aclose()
-                await self.send_channel.send(None)
-                break
+            while self.state == "connected":
+                if not self.pong_received:
+                    self.logger.info("Ping loop: PONG response has not been received, aborting")
+                    if self.ws:
+                        await self.ws.aclose()
+                    self.logger.info("Ping loop: Canceling write loop task")
+                    self._write_task_scope.cancel()
+                    # self.logger.info("Ping loop: Canceling read loop task")
+                    # self._read_task_scope.cancel()
+                    # await self.send_channel.send(None)
+                    break
 
-            self.pong_received = False
-            await self._send_packet(packet.Packet(packet.PING))
-            with trio.move_on_after(self.ping_interval):
-                await self.ping_loop_event.wait()
+                self.pong_received = False
+                await self._send_packet(packet.Packet(packet.PING))
+                await trio.sleep(self.ping_interval)
+                # with trio.move_on_after(self.ping_interval):
+                #     await self.ping_loop_event.wait()
 
-        self.logger.info("Exiting ping task")
+        # self.logger.info("Ping loop: Canceling write loop task")
+        # self._write_task_scope.cancel()
+        self.logger.info("Ping loop: Waiting before cancelling read loop task")
+        await trio.sleep(0.05)
+        await trio.sleep(0.05)
+        self.logger.info("Ping loop: Canceling read loop task")
+        self._read_task_scope.cancel()
+        self.logger.info("Ping loop: Exiting ping task")
 
-    async def _read_loop_polling(self):
+    async def _read_loop_polling(self, task_status=trio.TASK_STATUS_IGNORED):
         """Read packets by polling the Engine.IO server."""
-        t_out = max(self.ping_interval, self.ping_timeout) + 5
-        timeout = {
-            "connect": t_out,
-            "read": t_out,
-            "write": t_out,
-            "pool": t_out,
-        }
-        while self.state == "connected":
-            self.logger.info(
-                f"Sending polling GET request to {self.base_url}")
-            r = await self._send_request(
-                "GET", f"{self.base_url}&t={time.time()}",
-                timeout=timeout
-                )
-            if r is None:
-                self.logger.warning("Connection refused by the server, aborting")
-                await self.send_channel.send(None)
-                break
-            if r.status < 200 or r.status >= 300:
-                self.logger.warning(f"Unexpected status code {r.status} in server "
-                                    "response, aborting")
-                await self.send_channel.send(None)
-                break
+        with trio.CancelScope() as scope:
+            t_out = max(self.ping_interval, self.ping_timeout) + 5
+            timeout = {
+                "connect": t_out,
+                "read": t_out,
+                "write": t_out,
+                "pool": t_out,
+            }
+            task_status.started(scope)
+            while self.state == "connected":
+                self.logger.info(
+                    f"Polling read loop: Sending polling GET request to {self.base_url}")
+                r = await self._send_request(
+                    "GET", f"{self.base_url}&t={time.time()}",
+                    timeout=timeout
+                    )
+                if r is None:
+                    self.logger.warning("Polling read loop: Connection refused by the server, aborting")
+                    # self._write_task_scope.cancel()
+                    # await self.send_channel.send(None)
+                    break
+                if r.status < 200 or r.status >= 300:
+                    self.logger.warning(f"Polling read loop: Unexpected status code {r.status} in server "
+                                        "response, aborting")
+                    # self._write_task_scope.cancel()
+                    # await self.send_channel.send(None)
+                    break
+                try:
+                    p = payload.Payload(encoded_payload=await r.aread())
+                except ValueError:
+                    self.logger.warning("Polling read loop: Unexpected packet from server, aborting")
+                    # self._write_task_scope.cancel()
+                    # await self.send_channel.send(None)
+                    break
+                for pkt in p.packets:
+                    await self._receive_packet(pkt)
+
+        self.logger.info("Polling read loop: Waiting before cancelling tasks")
+        await trio.sleep(0.05)
+        self.logger.info("Polling read loop: Canceling write loop task")
+        # await self.write_loop_task
+        self._write_task_scope.cancel()
+        # await self.send_channel.send(None)
+        self.logger.info('Polling read loop: Cancelling ping loop task')
+        self._ping_task_scope.cancel()
+        # self.logger.info("Waiting for ping loop task to end")
+        # if self.ping_loop_event:
+        #     self.ping_loop_event.set()
+        # await self.ping_loop_task
+        if self.state == "connected":
+            await self._trigger_event("disconnect", run_async=False)
             try:
-                p = payload.Payload(encoded_payload=await r.aread())
+                connected_clients.remove(self)
             except ValueError:
-                self.logger.warning("Unexpected packet from server, aborting")
-                await self.send_channel.send(None)
-                break
-            for pkt in p.packets:
+                pass
+            await self._reset()
+        if self.http:
+            await self._reset()
+            # self.logger.debug(self.http.connections)
+        self.logger.info("Polling read loop: Exiting read loop task")
+
+    async def _read_loop_websocket(self, task_status=trio.TASK_STATUS_IGNORED):
+        """Read packets from the Engine.IO WebSocket connection."""
+        with trio.CancelScope() as scope:
+            timeout = max(self.ping_interval, self.ping_timeout) + 5
+            task_status.started(scope)
+            while self.state == "connected":
+                try:
+                    with trio.fail_after(timeout) as cancel_scope:
+                        p = await self.ws.get_message()
+                except trio_ws.ConnectionClosed:
+                    self.logger.info("Websocket read loop: WebSocket connection was closed, aborting")
+                    # self._write_task_scope.cancel()
+                    # await self.send_channel.send(None)
+                    break
+                except Exception as e:
+                    self.logger.info(f"Websocket read loop: Unexpected error receiving packet: {e}, aborting")
+                    # self._write_task_scope.cancel()
+                    # await self.send_channel.send(None)
+                    break
+                else:
+                    if cancel_scope.cancelled_caught:
+                        self.logger.info("Websocket read loop: WebSocket connection timeout, aborting")
+                        break
+                    if p is None:
+                        raise RuntimeError("WebSocket read returned None")
+
+                if isinstance(p, str):
+                    p = p.encode("utf-8")
+
+                try:
+                    pkt = packet.Packet(encoded_packet=p)
+                except Exception as e:
+                    self.logger.info(f"Websocket read loop: Unexpected error decoding packet: {e}, aborting")
+                    # self._write_task_scope.cancel()
+                    # await self.send_channel.send(None)
+                    break
+
                 await self._receive_packet(pkt)
 
-        # self.logger.info("Waiting for write loop task to end")
+        self.logger.info("Websocket read loop: Waiting before cancelling tasks")
+        await trio.sleep(0.05)
+        self.logger.info("Websocket read loop: Cancelling write loop task")
         # await self.write_loop_task
-        self.logger.info("Waiting for ping loop task to end")
-        if self.ping_loop_event:
-            self.ping_loop_event.set()
+        self._write_task_scope.cancel()
+        self.logger.info('Websocket read loop: Cancelling ping loop task')
+        self._ping_task_scope.cancel()
+        # self.logger.info('Waiting for ping loop task to end')
+        # if self.ping_loop_event:
+        #     self.ping_loop_event.set()
         # await self.ping_loop_task
+        # with trio.fail_after(self.request_timeout["connect"]):
+        #     await self.ws.aclose()
+        #     self.logger.info(f"Websocket read loop: Websocket closed: {self.ws.closed}")
+        # if self.http:
+        #     await self._reset()
+        await self._reset()
         if self.state == "connected":
             await self._trigger_event("disconnect", run_async=False)
             try:
@@ -643,114 +761,78 @@ class TrioClient:
             except ValueError:
                 pass
             await self._reset()
-        self.logger.info("Exiting read loop task")
+        self.logger.info("Websocket read loop: Exiting read loop task")
 
-    async def _read_loop_websocket(self):
-        """Read packets from the Engine.IO WebSocket connection."""
-        while self.state == "connected":
-            try:
-                p = await self.ws.get_message()
-                if p is None:
-                    raise RuntimeError("WebSocket read returned None")
-            except trio_ws.ConnectionClosed:
-                self.logger.info("Read loop: WebSocket connection was closed, aborting")
-                await self.send_channel.send(None)
-                break
-            except Exception as e:
-                self.logger.info(f"Unexpected error receiving packet: {e}, aborting")
-                await self.send_channel.send(None)
-                break
-
-            if isinstance(p, str):
-                p = p.encode("utf-8")
-
-            try:
-                pkt = packet.Packet(encoded_packet=p)
-            except Exception as e:
-                self.logger.info(f"Unexpected error decoding packet: {e}, aborting")
-                await self.send_channel.send(None)
-                break
-
-            await self._receive_packet(pkt)
-
-        # self.logger.info("Waiting for write loop task to end")
-        # await self.write_loop_task
-        self.logger.info('Waiting for ping loop task to end')
-        if self.ping_loop_event:
-            self.ping_loop_event.set()
-        # await self.ping_loop_task
-        if self.state == "connected":
-            await self._trigger_event("disconnect", run_async=False)
-            try:
-                connected_clients.remove(self)
-            except ValueError:
-                pass
-            await self._reset()
-        self.logger.info("Exiting read loop task")
-
-    async def _write_loop(self):
+    async def _write_loop(self, task_status=trio.TASK_STATUS_IGNORED):
         """This background task sends packages to the server as they are
         pushed to the send queue.
         """
         # to simplify the timeout handling, use the maximum of the
         # ping interval and ping timeout as timeout, with an extra 5
         # seconds grace period
-        timeout = max(self.ping_interval, self.ping_timeout) + 5
+        with trio.CancelScope() as scope:
+            task_status.started(scope)
 
-        while self.state == "connected":
+            timeout = max(self.ping_interval, self.ping_timeout) + 5
 
-            with trio.move_on_after(timeout) as cancel_scope:
-                pkt = await self.receive_channel.receive()
-            if cancel_scope.cancelled_caught:
-                self.logger.error("packet queue is empty, aborting")
-                break
+            while self.state == "connected":
 
-            if pkt is None:
-                packets = []
-            else:
-                packets = [pkt]
-                while True:
+                with trio.move_on_after(timeout) as cancel_scope:
+                    pkt = await self.receive_channel.receive()
+                    self.logger.debug(f"Write loop: Get packet to write: {pkt.packet_type}")
+                if cancel_scope.cancelled_caught:
+                    self.logger.error("Write loop: packet queue is empty, aborting")
+                    break
+
+                if pkt is None:
+                    packets = []
+                else:
+                    packets = [pkt]
+                    while True:
+                        try:
+                            pkt = self.receive_channel.receive_nowait()
+                            self.logger.debug(f"Write loop: Get other packet to write: {pkt}")
+                        except (trio.WouldBlock, trio.EndOfChannel):
+                            break
+                        except (trio.BrokenResourceError, trio.ClosedResourceError):
+                            self.logger.error("Write loop: packet queue is closed, aborting")
+                            break
+                        else:
+                            if pkt is not None:
+                                packets.append(pkt)
+
+                if not packets:
+                    # empty packet list returned -> connection closed
+                    self.logger.error("Write loop: No packet to send, aborting")
+                    break
+
+                if self.current_transport == "polling":
+                    p = payload.Payload(packets=packets)
+                    r = await self._send_request(
+                        'POST', self.base_url, body=p.encode(),
+                        headers={"Content-Type": "application/octet-stream"},
+                        timeout=self.request_timeout)
+                    if r is None:
+                        self.logger.warning("Write loop: Connection refused by the server, aborting")
+                        break
+                    if r.status < 200 or r.status >= 300:
+                        self.logger.warning(
+                            f"Write loop: Unexpected status code {r.status} in server response, "
+                            f"aborting"
+                        )
+                        await self._reset()
+                        break
+                    self.logger.debug("Write loop: Packet(s) written")
+                else:
+                    # websocket
                     try:
-                        pkt = self.receive_channel.receive_nowait()
-                    except (trio.WouldBlock, trio.EndOfChannel):
+                        for pkt in packets:
+                            await self.ws.send_message(pkt.encode(always_bytes=False))
+                    except trio_ws.ConnectionClosed:
+                        self.logger.info(
+                            "Write loop: WebSocket connection was closed, aborting"
+                        )
                         break
-                    except (trio.BrokenResourceError, trio.ClosedResourceError):
-                        self.logger.error("packet queue is closed, aborting")
-                        break
-                    else:
-                        if pkt is not None:
-                            packets.append(pkt)
+                    self.logger.debug("Write loop: Packet(s) written")
 
-            if not packets:
-                # empty packet list returned -> connection closed
-                self.logger.error("No packet to send, aborting")
-                break
-
-            if self.current_transport == "polling":
-                p = payload.Payload(packets=packets)
-                r = await self._send_request(
-                    'POST', self.base_url, body=p.encode(),
-                    headers={"Content-Type": "application/octet-stream"},
-                    timeout=self.request_timeout)
-                if r is None:
-                    self.logger.warning("Connection refused by the server, aborting")
-                    break
-                if r.status < 200 or r.status >= 300:
-                    self.logger.warning(
-                        f"Unexpected status code {r.status} in server response, "
-                        f"aborting"
-                    )
-                    await self._reset()
-                    break
-            else:
-                # websocket
-                try:
-                    for pkt in packets:
-                        await self.ws.send_message(pkt.encode(always_bytes=False))
-                except trio_ws.ConnectionClosed:
-                    self.logger.info(
-                        "Write loop: WebSocket connection was closed, aborting"
-                    )
-                    break
-
-        self.logger.info("Exiting write loop task")
+        self.logger.info("Write loop: Exiting write loop task")
