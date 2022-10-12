@@ -1,8 +1,18 @@
 import base64
 import json as _json
 
+from .eio_types import JsonProtocol
+
 (OPEN, CLOSE, PING, PONG, MESSAGE, UPGRADE, NOOP) = (0, 1, 2, 3, 4, 5, 6)
-packet_names = ['OPEN', 'CLOSE', 'PING', 'PONG', 'MESSAGE', 'UPGRADE', 'NOOP']
+packet_names = {
+    OPEN: "OPEN",
+    CLOSE: "CLOSE",
+    PING: "PING",
+    PONG: "PONG",
+    MESSAGE: "MESSAGE",
+    UPGRADE: "UPGRADE",
+    NOOP: "NOOP",
+}
 
 binary_types = (bytes, bytearray)
 
@@ -10,10 +20,9 @@ binary_types = (bytes, bytearray)
 class Packet(object):
     """Engine.IO packet."""
 
-    json = _json
+    json: JsonProtocol = _json
 
-    def __init__(self, packet_type=NOOP, data=None, binary=None,
-                 encoded_packet=None):
+    def __init__(self, packet_type=NOOP, data=None, binary=None, encoded_packet=None):
         self.packet_type = packet_type
         self.data = data
         if binary is not None:
@@ -34,28 +43,27 @@ class Packet(object):
         else:
             encoded_packet = str(self.packet_type)
             if self.binary and b64:
-                encoded_packet = 'b' + encoded_packet
+                encoded_packet = "b" + encoded_packet
         if self.binary:
             if b64:
-                encoded_packet += base64.b64encode(self.data).decode('utf-8')
+                encoded_packet += base64.b64encode(self.data).decode("utf-8")
             else:
                 encoded_packet += self.data
         elif isinstance(self.data, str):
             encoded_packet += self.data
         elif isinstance(self.data, dict) or isinstance(self.data, list):
-            encoded_packet += self.json.dumps(self.data,
-                                              separators=(',', ':'))
+            encoded_packet += self.json.dumps(self.data, separators=(",", ":"))
         elif self.data is not None:
             encoded_packet += str(self.data)
         if always_bytes and not isinstance(encoded_packet, binary_types):
-            encoded_packet = encoded_packet.encode('utf-8')
+            encoded_packet = encoded_packet.encode("utf-8")
         return encoded_packet
 
     def decode(self, encoded_packet):
         """Decode a transmitted package."""
         b64 = False
         if not isinstance(encoded_packet, binary_types):
-            encoded_packet = encoded_packet.encode('utf-8')
+            encoded_packet = encoded_packet.encode("utf-8")
         elif not isinstance(encoded_packet, bytes):
             encoded_packet = bytes(encoded_packet)
         self.packet_type = encoded_packet[0:1][0]
@@ -79,12 +87,17 @@ class Packet(object):
                     self.data = encoded_packet[1:]
             else:
                 try:
-                    self.data = self.json.loads(
-                        encoded_packet[1:].decode('utf-8'))
+                    self.data = self.json.loads(encoded_packet[1:].decode("utf-8"))
                     if isinstance(self.data, int):
                         # do not allow integer payloads, see
                         # github.com/miguelgrinberg/python-engineio/issues/75
                         # for background on this decision
                         raise ValueError
                 except ValueError:
-                    self.data = encoded_packet[1:].decode('utf-8')
+                    self.data = encoded_packet[1:].decode("utf-8")
+
+    def __repr__(self) -> str:
+        return (
+            f"Packet({packet_names[self.packet_type]}, "
+            f"data={self.data if not isinstance(self.data, bytes) else '<binary>'})"
+        )

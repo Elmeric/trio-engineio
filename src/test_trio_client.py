@@ -3,16 +3,30 @@ import logging
 
 import trio
 
-from trio_engineio.trio_client import TrioClient, EngineIoConnectionError
+from trio_engineio import EngineIoClient, EngineIoConnectionError
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# create console handler and set level to debug
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+
+# create formatter
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+# add formatter to ch
+ch.setFormatter(formatter)
+
+# add ch to logger
+logger.addHandler(ch)
 
 
 def commands():
-    ''' Print the supported commands. '''
-    print('Commands: ')
-    print('send <MESSAGE>   -> send message')
-    print('close  -> politely close connection')
+    """Print the supported commands."""
+    print("Commands: ")
+    print("send <MESSAGE>   -> send message")
+    print("close  -> politely close connection")
     print()
 
 
@@ -28,17 +42,17 @@ def on_disconnect():
     print(f"***** Disconnected")
 
 
-async def get_commands(eio: TrioClient):
-    ''' In a loop: get a command from the user and execute it. '''
+async def get_commands(eio: EngineIoClient):
+    """In a loop: get a command from the user and execute it."""
     while True:
-        cmd = await trio.to_thread.run_sync(input, 'cmd> ', cancellable=True)
-        if cmd.startswith('send'):
+        cmd = await trio.to_thread.run_sync(input, "cmd> ", cancellable=True)
+        if cmd.startswith("send"):
             message = cmd[5:] or None
             if message is None:
                 logging.error('The "send" command requires a message.')
             else:
                 await eio.send(message)
-        elif cmd.startswith('close'):
+        elif cmd.startswith("close"):
             await eio.disconnect()
             break
         else:
@@ -48,8 +62,9 @@ async def get_commands(eio: TrioClient):
 
 
 async def main():
-    eio = TrioClient(logger=False)
-    # eio = TrioClient(logger=logger)
+    logger.debug("Starting...")
+    # eio = EngineIoClient(logger=False)
+    eio = EngineIoClient(logger=logger, ssl_verify=True)
 
     eio.on("connect", on_connect)
     eio.on("message", on_message)
@@ -63,10 +78,10 @@ async def main():
                 # transports=["websocket"],
                 # transports=["polling"],
                 transports=["polling", "websocket"],
-                engineio_path="/socket.io"
+                engineio_path="/socket.io",
             )
         except (EngineIoConnectionError, ValueError) as e:
-            print(f"Connection refused by server: {e}")
+            print(f"Connection error: {e}")
             return False
         print("______________________________________")
         nursery.start_soon(get_commands, eio)
@@ -75,7 +90,7 @@ async def main():
     return True
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         if not trio.run(main):
             sys.exit(1)
