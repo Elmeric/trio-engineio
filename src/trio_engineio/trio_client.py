@@ -152,7 +152,6 @@ class EngineIoClient:
         else:
             self._logger = default_logger
             if self._logger.level == logging.NOTSET:
-            # if not logging.root.handlers and self._logger.level == logging.NOTSET:
                 if logger:
                     self._logger.setLevel(logging.INFO)
                 else:
@@ -269,9 +268,7 @@ class EngineIoClient:
         self._send_channel, self._receive_channel = trio.open_memory_channel(10)
 
         if self._transports[0] == "polling":
-            return await self._connect_polling(
-                nursery, url, headers, engineio_path
-            )
+            return await self._connect_polling(nursery, url, headers, engineio_path)
         # websocket
         return await self._connect_websocket(nursery, url, headers, engineio_path)
 
@@ -634,7 +631,7 @@ class EngineIoClient:
         Args:
             pkt: the `packet.Packet` object to queue.
         """
-        if self.state != 'connected':
+        if self.state != "connected":
             return
         self._logger.info(
             f"Sending packet {packet.packet_names[pkt.packet_type]}, data: "
@@ -719,7 +716,7 @@ class EngineIoClient:
             if inspect.iscoroutinefunction(self._handlers[event]) is True:
                 try:
                     return await self._handlers[event](*args)
-                except Exception as e:
+                except Exception:
                     self._logger.exception(f"{event} async handler error")
             else:
                 if run_async:
@@ -1052,13 +1049,16 @@ class EngineIoClient:
                                 f"Write loop: No more packet available, continue"
                             )
                             break
-                        except (trio.BrokenResourceError, trio.ClosedResourceError):    # pragma: no cover
+                        except (
+                            trio.BrokenResourceError,
+                            trio.ClosedResourceError,
+                        ):  # pragma: no cover
                             self._logger.error(
                                 "Write loop: packet queue is closed, aborting"
                             )
                             break
                         else:
-                            if pkt is not None: # pragma: no branch
+                            if pkt is not None:  # pragma: no branch
                                 packets.append(pkt)
 
                 if not packets:
