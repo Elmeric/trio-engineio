@@ -136,6 +136,12 @@ class EngineIoClient:
         self._ping_task_scope: trio.CancelScope | None = None
         self._write_task_scope: trio.CancelScope | None = None
         self._read_task_scope: trio.CancelScope | None = None
+        self._timeouts: Timeouts = {
+            "connect": request_timeout,
+            "read": request_timeout,
+            "write": request_timeout,
+            "pool": request_timeout,
+        }
 
         if json is not None:
             packet.Packet.json = json
@@ -145,19 +151,13 @@ class EngineIoClient:
             self._logger = logger
         else:
             self._logger = default_logger
-            if not logging.root.handlers and self._logger.level == logging.NOTSET:
+            if self._logger.level == logging.NOTSET:
+            # if not logging.root.handlers and self._logger.level == logging.NOTSET:
                 if logger:
                     self._logger.setLevel(logging.INFO)
                 else:
                     self._logger.setLevel(logging.ERROR)
                 self._logger.addHandler(logging.StreamHandler())
-
-        self._timeouts: Timeouts = {
-            "connect": request_timeout,
-            "read": request_timeout,
-            "write": request_timeout,
-            "pool": request_timeout,
-        }
 
     def on(
         self, event: EventName, handler: Callable[[Any], Any] | None = None
@@ -266,14 +266,14 @@ class EngineIoClient:
         except TypeError as e:
             raise EngineIoConnectionError(f"Bad type: {e}")
 
-        self._send_channel, self._receive_channel = trio.open_memory_channel(1)
+        self._send_channel, self._receive_channel = trio.open_memory_channel(10)
 
         if self._transports[0] == "polling":
             return await self._connect_polling(
-                nursery, url, headers or {}, engineio_path
+                nursery, url, headers, engineio_path
             )
         # websocket
-        return await self._connect_websocket(nursery, url, headers or {}, engineio_path)
+        return await self._connect_websocket(nursery, url, headers, engineio_path)
 
     # async def wait(self):
     #     """Wait until the connection with the server ends.
@@ -324,9 +324,10 @@ class EngineIoClient:
 
             try:
                 connected_clients.remove(self)
-            except ValueError:
+            except ValueError:  # pragma: no cover
                 pass
 
+        self.state = "disconnected"
         self._sid = None
         self._current_transport = None
 
@@ -385,7 +386,7 @@ class EngineIoClient:
         self,
         nursery: trio.Nursery,
         url: httpcore.URL,
-        headers: Headers | None,
+        headers: Headers,
         engineio_path: bytes,
     ) -> bool:
         """Establish a long-polling connection to the Engine.IO server.
@@ -394,8 +395,8 @@ class EngineIoClient:
             nursery: a `trio.Nursery` object in which to run the Engine.IO background
                 tasks.
             url: The URL to connect to.
-            headers: An optional sequence or mapping of custom headers keys-values to
-                send with the connection request.
+            headers: A sequence of custom headers keys-values to send with the
+                connection request. Empty list if no custome headers.
             engineio_path: The endpoint to connect to.
 
         Raises:
@@ -469,7 +470,7 @@ class EngineIoClient:
         self,
         nursery: trio.Nursery,
         url: httpcore.URL,
-        headers: Headers | None,
+        headers: Headers,
         engineio_path: bytes,
     ) -> bool:
         """Establish or upgrade to a WebSocket connection with the server.
@@ -478,8 +479,8 @@ class EngineIoClient:
             nursery: a `trio.Nursery` object in which to run the Engine.IO background
                 tasks.
             url: The URL to connect to.
-            headers: An optional sequence or mapping of custom headers keys-values to
-                send with the connection request.
+            headers: A sequence of custom headers keys-values to send with the
+                connection request. Empty list if no custome headers.
             engineio_path: The endpoint to connect to.
 
         Raises:
@@ -628,9 +629,13 @@ class EngineIoClient:
     async def _send_packet(self, pkt: packet.Packet) -> None:
         """Queue a packet to be sent to the server.
 
+        Do nothing if the EngineIoClient object is not connected.
+
         Args:
             pkt: the `packet.Packet` object to queue.
         """
+        if self.state != 'connected':
+            return
         self._logger.info(
             f"Sending packet {packet.packet_names[pkt.packet_type]}, data: "
             f"{pkt.data if not isinstance(pkt.data, bytes) else '<binary>'}"
@@ -714,7 +719,7 @@ class EngineIoClient:
             if inspect.iscoroutinefunction(self._handlers[event]) is True:
                 try:
                     return await self._handlers[event](*args)
-                except Exception:
+                except Exception as e:
                     self._logger.exception(f"{event} async handler error")
             else:
                 if run_async:
@@ -722,10 +727,13 @@ class EngineIoClient:
                     async def async_handler():
                         return self._handlers[event](*args)
 
-                    async with trio.open_nursery() as nursery:
-                        r = ResultCapture.start_soon(nursery, async_handler)
                     try:
-                        return r.result
+                        async with trio.open_nursery() as nursery:
+                            t = ResultCapture.start_soon(nursery, async_handler)
+                    except BaseException:
+                        pass
+                    try:
+                        return t.result
                     except TaskWrappedException:
                         self._logger.exception(f"{event} handler error")
                 else:
@@ -773,7 +781,7 @@ class EngineIoClient:
             path, query = target_chunks[0], target_chunks[1]
 
         if path == b"/":
-            path += engineio_path + b"/"
+            path += engineio_path
 
         if query:
             query += b"&transport=" + transport.encode("ascii") + b"&EIO=3"
@@ -897,7 +905,7 @@ class EngineIoClient:
             await self._trigger_event("disconnect", run_async=False)
             try:
                 connected_clients.remove(self)
-            except ValueError:
+            except ValueError:  # pragma: no cover
                 pass
             await self._reset()
         else:
@@ -925,11 +933,21 @@ class EngineIoClient:
                 # Wait for an incoming packet
                 self._logger.info(f"Websocket read loop: Wait for an incoming packet")
                 try:
-                    with trio.fail_after(timeout) as cancel_scope:
+                    with trio.fail_after(timeout):
                         p = await self._ws.get_message()
+                        if p is None:
+                            self._logger.warning(
+                                f"Websocket read loop: WebSocket read returned None, aborting"
+                            )
+                            break
                 except trio_ws.ConnectionClosed:
                     self._logger.warning(
                         "Websocket read loop: WebSocket connection was closed, aborting"
+                    )
+                    break
+                except trio.TooSlowError:
+                    self._logger.warning(
+                        "Websocket read loop: WebSocket connection timeout, aborting"
                     )
                     break
                 except Exception as e:
@@ -938,25 +956,13 @@ class EngineIoClient:
                         f" aborting"
                     )
                     break
-                else:
-                    if cancel_scope.cancelled_caught:
-                        self._logger.warning(
-                            "Websocket read loop: WebSocket connection timeout, aborting"
-                        )
-                        break
-                    if p is None:
-                        self._logger.warning(
-                            f"Websocket read loop: WebSocket read returned None, aborting"
-                        )
-                        break
-                        # raise RuntimeError("WebSocket read returned None")
 
                 # Decode the received message as valid packet
                 if isinstance(p, str):
                     p = p.encode("utf-8")
                 try:
                     pkt = packet.Packet(encoded_packet=p)
-                except Exception as e:
+                except Exception as e:  # pragma: no cover
                     self._logger.info(
                         f"Websocket read loop: Unexpected error decoding packet: {e}, aborting"
                     )
@@ -984,7 +990,7 @@ class EngineIoClient:
             await self._trigger_event("disconnect", run_async=False)
             try:
                 connected_clients.remove(self)
-            except ValueError:
+            except ValueError:  # pragma: no cover
                 pass
             await self._reset()
         else:
@@ -1046,13 +1052,13 @@ class EngineIoClient:
                                 f"Write loop: No more packet available, continue"
                             )
                             break
-                        except (trio.BrokenResourceError, trio.ClosedResourceError):
+                        except (trio.BrokenResourceError, trio.ClosedResourceError):    # pragma: no cover
                             self._logger.error(
                                 "Write loop: packet queue is closed, aborting"
                             )
                             break
                         else:
-                            if pkt is not None:
+                            if pkt is not None: # pragma: no branch
                                 packets.append(pkt)
 
                 if not packets:
@@ -1084,7 +1090,6 @@ class EngineIoClient:
                             f"Write loop: Unexpected status code {r.status} in server response, "
                             f"aborting"
                         )
-                        await self._reset()
                         break
                     self._logger.debug("Write loop: Packet(s) written")
                 else:

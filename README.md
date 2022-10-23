@@ -1,6 +1,7 @@
 
 # Trio-Engine.IO
 
+[![Tests](https://github.com/Elmeric/trio-engineio/actions/workflows/test.yml/badge.svg)](https://github.com/Elmeric/trio-engineio/actions/workflows/test.yml)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 An asynchronous **[Engine.IO](https://github.com/socketio/engine.io-protocol/tree/v3)** client using the [`trio`](https://trio.readthedocs/en/latest) framework.
