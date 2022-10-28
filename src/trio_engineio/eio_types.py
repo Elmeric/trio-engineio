@@ -109,6 +109,57 @@ class NoCachingURL(httpcore.URL):
         self._target += value
 
 
+def get_engineio_url(
+     url: httpcore.URL, engineio_path: bytes, transport: Transport
+) -> NoCachingURL:
+    """Generate the Engine.IO connection URL.
+
+    Args:
+        url: The URL to connect to.
+        engineio_path: The endpoint to connect to.
+        transport: Indicates whether the URL wil be used for a "polling"
+            or a "websocket" connection.
+
+    Returns:
+        the built URL as a `NoCachingURL` object.
+    """
+    engineio_path = engineio_path.strip(b"/")
+
+    # Adapt the URL scheme to the given transport, keeping its "secured" property.
+    if transport == "polling":
+        scheme = "http"
+    else:  # transport == "websocket":
+        scheme = "ws"
+    if url.scheme in [b"https", b"wss"]:
+        scheme += "s"
+
+    # Check if a path and/or query is present in the URL (it is supposed that the
+    # given path and query are used to override the standard Engine.io path and add
+    # query parameters to the standard ones.
+    # If an empty path ("/") is present, amend it with the given path, otherwise
+    # keep the present one.
+    # If a query is present, extend it with the "transport" and "EIO" keys,
+    # otherwise,  build query required by the Engine.io protocol.
+    target = url.target
+    target_chunks = target.split(b"?", 1)
+    if len(target_chunks) == 1:
+        path, query = target_chunks[0], b""
+    else:
+        path, query = target_chunks[0], target_chunks[1]
+
+    if path == b"/":
+        path += engineio_path
+
+    if query:
+        query += b"&transport=" + transport.encode("ascii") + b"&EIO=3"
+    else:
+        query = b"transport=" + transport.encode("ascii") + b"&EIO=3"
+
+    target = path + b"?" + query
+
+    return NoCachingURL(scheme=scheme, host=url.host, port=url.port, target=target)
+
+
 class JsonProtocol(Protocol):
     def dumps(
         self,
