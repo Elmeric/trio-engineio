@@ -709,7 +709,7 @@ async def test_polling_connection_failed(
     assert saved_request["method"] == "GET"
     assert (
         bytes(saved_request["url"])
-        == b"http://foo/socket.io?transport=polling&EIO=3&t=123.456"
+        == b"http://foo/socket.io/?transport=polling&EIO=3&t=123.456"
     )
     assert saved_request["headers"] == [(b"Foo", b"Bar")]
     assert saved_request["timeouts"] == {
@@ -735,7 +735,7 @@ async def test_polling_connection_404(
     assert str(excinfo.value) == "Unexpected status code 404 in server response"
     assert (
         bytes(saved_request["url"])
-        == b"http://foo/engine.io?transport=polling&EIO=3&t=123.456"
+        == b"http://foo/engine.io/?transport=polling&EIO=3&t=123.456"
     )
     assert len(mock_reset) == 1
 
@@ -756,7 +756,7 @@ async def test_polling_connection_invalid_packet(
 
     assert (
         bytes(saved_request["url"])
-        == b"http://foo/socket.io?transport=polling&EIO=3&t=123.456"
+        == b"http://foo/socket.io/?transport=polling&EIO=3&t=123.456"
     )
     assert len(mock_reset) == 1
 
@@ -777,7 +777,7 @@ async def test_polling_connection_no_open_packet(
 
     assert (
         bytes(saved_request["url"])
-        == b"http://foo/socket.io?transport=polling&EIO=3&t=123.456"
+        == b"http://foo/socket.io/?transport=polling&EIO=3&t=123.456"
     )
     assert len(mock_reset) == 1
 
@@ -819,7 +819,7 @@ async def test_polling_connection_successful(
     assert c._current_transport == "polling"
     assert bytes(
         c._base_url
-    ) == b"%b://foo/engine.io?test=1&transport=polling&EIO=3&sid=123&t=123.456" % scheme.encode(
+    ) == b"%b://foo/engine.io/?test=1&transport=polling&EIO=3&sid=123&t=123.456" % scheme.encode(
         "ascii"
     )
     assert c.state == "connected"
@@ -894,7 +894,7 @@ async def test_polling_connection_upgraded(
     assert c._current_transport == "polling"
     assert (
         bytes(c._base_url)
-        == b"http://foo/engine.io?transport=polling&EIO=3&sid=123&t=123.456"
+        == b"http://foo/engine.io/?transport=polling&EIO=3&sid=123&t=123.456"
     )
     assert c.state == "connected"
     assert c in trio_client.connected_clients
@@ -945,7 +945,7 @@ async def test_polling_connection_not_upgraded(
     assert c._current_transport == "polling"
     assert (
         bytes(c._base_url)
-        == b"http://foo/engine.io?transport=polling&EIO=3&sid=123&t=123.456"
+        == b"http://foo/engine.io/?transport=polling&EIO=3&sid=123&t=123.456"
     )
     assert c.state == "connected"
     assert c in trio_client.connected_clients
@@ -995,7 +995,7 @@ async def test_polling_connection_no_upgrade(
     assert c._current_transport == "polling"
     assert (
         bytes(c._base_url)
-        == b"http://foo/engine.io?transport=polling&EIO=3&sid=123&t=123.456"
+        == b"http://foo/engine.io/?transport=polling&EIO=3&sid=123&t=123.456"
     )
     assert c.state == "connected"
     assert c in trio_client.connected_clients
@@ -1027,7 +1027,7 @@ async def test_websocket_connection_failed(
         )
     assert called_with["host"] == "foo"
     assert called_with["port"] is None
-    assert called_with["resource"] == "/socket.io?transport=websocket&EIO=3&t=123.456"
+    assert called_with["resource"] == "/socket.io/?transport=websocket&EIO=3&t=123.456"
     assert called_with["extra_headers"] == [(b"Foo", b"Bar")]
     assert not called_with["use_ssl"]
 
@@ -1050,7 +1050,7 @@ async def test_websocket_upgrade_failed(
     assert called_with["port"] == 1234
     assert (
         called_with["resource"]
-        == "/engine.io?transport=websocket&EIO=3&sid=123&t=123.456"
+        == "/engine.io/?transport=websocket&EIO=3&sid=123&t=123.456"
     )
     assert called_with["extra_headers"] == []
     assert not called_with["use_ssl"]
@@ -1124,7 +1124,7 @@ async def test_websocket_connection_successful(
     assert c._current_transport == "websocket"
     assert bytes(
         c._base_url
-    ) == b"%b://foo/engine.io?transport=websocket&EIO=3&t=123.456" % scheme.encode(
+    ) == b"%b://foo/engine.io/?transport=websocket&EIO=3&t=123.456" % scheme.encode(
         "ascii"
     )
     assert c.state == "connected"

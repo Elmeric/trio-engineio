@@ -10,11 +10,11 @@ from trio_engineio.eio_types import get_engineio_url
 @pytest.mark.parametrize(
     "target, expected_target",
     (
-        ("/", "/toto?transport={0}&EIO=3&t=123.456"),
-        ("/socket.io", "/socket.io?transport={0}&EIO=3&t=123.456"),
+        ("/", "/toto/?transport={0}&EIO=3&t=123.456"),
+        ("/socket.io", "/socket.io/?transport={0}&EIO=3&t=123.456"),
         (
-            "/socket.io?test=123",
-            "/socket.io?test=123&transport={0}&EIO=3&t=123.456",
+            "/socket.io/?test=123",
+            "/socket.io/?test=123&transport={0}&EIO=3&t=123.456",
         ),
     ),
 )
