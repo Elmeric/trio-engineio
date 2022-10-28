@@ -149,13 +149,15 @@ def get_engineio_url(
 
     if path == b"/":
         path += engineio_path
+    if path[-1:] == b"/":
+        path = path[:-1]
 
     if query:
         query += b"&transport=" + transport.encode("ascii") + b"&EIO=3"
     else:
         query = b"transport=" + transport.encode("ascii") + b"&EIO=3"
 
-    target = path + b"?" + query
+    target = path + b"/?" + query
 
     return NoCachingURL(scheme=scheme, host=url.host, port=url.port, target=target)
 
