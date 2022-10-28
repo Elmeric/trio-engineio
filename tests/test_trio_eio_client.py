@@ -4,6 +4,7 @@ import json
 import logging
 import ssl
 from typing import AsyncIterator
+from unittest.mock import patch
 
 import pytest
 import trio
@@ -12,7 +13,6 @@ import httpcore
 from trio_engineio import trio_client, EngineIoConnectionError
 from trio_engineio import packet, payload
 from trio_engineio import eio_types
-from trio_engineio import trio_util
 
 # https://github.com/miguelgrinberg/python-socketio/issues/332
 
@@ -20,47 +20,83 @@ from trio_engineio import trio_util
 # from https://www.inspiredpython.com/article/five-advanced-pytest-fixture-patterns
 @pytest.fixture
 def mock_connect_polling(monkeypatch):
-    params = {}
+    called_with = {}
 
     async def _connect_polling(*args):
-        params["url"] = bytes(args[2])
-        params["headers"] = args[3]
-        params["engineio_path"] = args[4]
+        called_with["url"] = bytes(args[2])
+        called_with["headers"] = args[3]
+        called_with["engineio_path"] = args[4]
         return True
 
-    monkeypatch.setattr("trio_engineio.trio_client.EngineIoClient._connect_polling", _connect_polling)
+    monkeypatch.setattr(
+        "trio_engineio.trio_client.EngineIoClient._connect_polling", _connect_polling
+    )
 
-    return params
+    return called_with
 
 
 @pytest.fixture
 def mock_connect_websocket(monkeypatch):
-    params = {}
+    state = {"success": True}
+    called_with = {}
 
     async def _connect_websocket(*args):
-        params["url"] = bytes(args[2])
-        params["headers"] = args[3]
-        params["engineio_path"] = args[4]
-        return True
+        called_with["url"] = bytes(args[2])
+        called_with["headers"] = args[3]
+        called_with["engineio_path"] = args[4]
+        return state["success"]
 
-    monkeypatch.setattr("trio_engineio.trio_client.EngineIoClient._connect_websocket", _connect_websocket)
+    monkeypatch.setattr(
+        "trio_engineio.trio_client.EngineIoClient._connect_websocket",
+        _connect_websocket,
+    )
 
-    return params
+    return state, called_with
+
+
+@pytest.fixture
+def mock_disconnect(monkeypatch):
+    called = []
+
+    async def _disconnect(_):
+        called.append(True)
+        return
+
+    monkeypatch.setattr(
+        "trio_engineio.trio_client.EngineIoClient.disconnect", _disconnect
+    )
+
+    return called
+
+
+@pytest.fixture
+def mock_reset(monkeypatch):
+    called = []
+
+    async def _reset(_):
+        called.append(True)
+        return
+
+    monkeypatch.setattr("trio_engineio.trio_client.EngineIoClient._reset", _reset)
+
+    return called
 
 
 @pytest.fixture
 def mock_trigger_event(monkeypatch):
-    params = {}
+    called_with = {}
 
     async def _trigger_event(*args, **kwargs):
-        params["event"] = args[1]
-        params["args"] = args[2:]
-        params["run_async"] = kwargs["run_async"]
+        called_with["event"] = args[1]
+        called_with["args"] = args[2:]
+        called_with["run_async"] = kwargs["run_async"]
         return True
 
-    monkeypatch.setattr("trio_engineio.trio_client.EngineIoClient._trigger_event", _trigger_event)
+    monkeypatch.setattr(
+        "trio_engineio.trio_client.EngineIoClient._trigger_event", _trigger_event
+    )
 
-    return params
+    return called_with
 
 
 @pytest.fixture
@@ -71,62 +107,82 @@ def mock_send_packet(monkeypatch):
         saved_packets.append(pkt)
         return
 
-    monkeypatch.setattr("trio_engineio.trio_client.EngineIoClient._send_packet", _send_packet)
+    monkeypatch.setattr(
+        "trio_engineio.trio_client.EngineIoClient._send_packet", _send_packet
+    )
 
     return saved_packets
 
 
 @pytest.fixture
+def mock_receive_packet(monkeypatch):
+    received_packets = []
+
+    async def _receive_packet(_, pkt: packet.Packet) -> None:
+        received_packets.append(pkt)
+        return
+
+    monkeypatch.setattr(
+        "trio_engineio.trio_client.EngineIoClient._receive_packet", _receive_packet
+    )
+
+    return received_packets
+
+
+@pytest.fixture
 def mock_send_request(monkeypatch):
     state = {
-        "mode": "connect",
         "status": 200,
         "returned_packet": packet.Packet(
             packet.OPEN,
-            data={"sid": "123", "upgrades": [], "pingInterval": 1000, "pingTimeout": 2000}
+            data={
+                "sid": "123",
+                "upgrades": [],
+                "pingInterval": 1000,
+                "pingTimeout": 2000,
+            },
         ),
         "more_packets": False,
-        "success": True,
     }
     saved_request = {}
 
-    async def _send_request(_, method, url, headers=None, body=None, timeouts=None) -> MockResponse | None:
+    async def _send_request(
+        _, method, url, headers=None, body=None, timeouts=None
+    ) -> MockResponse | None:
         saved_request["method"] = method
         saved_request["url"] = url
         saved_request["headers"] = headers
         saved_request["body"] = body
         saved_request["timeouts"] = timeouts
-        mode = state["mode"]
         status = state["status"]
         returned_packet = state["returned_packet"]
         more_packets = state["more_packets"]
         response = None
         if method == "GET":
-            if mode in ("connect", "poll"):
-                if status is None:
-                    response = None
-                elif status == 404:
-                    response = MockResponse(status)
-                elif status == 200 and returned_packet == "INVALID":
-                    response = MockResponse(status, content=b"foo")
-                elif status == 200:
-                    if more_packets:
-                        pkt2 = packet.Packet(packet.NOOP)
-                        p = payload.Payload([returned_packet, pkt2])
-                    else:
-                        p = payload.Payload([returned_packet])
-                    content = p.encode()
-                    response = MockResponse(status, headers=headers, content=content)
-        elif method == "POST":
             if status is None:
                 response = None
-            else:
+            elif status < 200 or status >= 300:
                 response = MockResponse(status)
-            # elif status == 200:
-            #     response = MockResponse(status, content=b"ok")
+            elif returned_packet == "INVALID":
+                response = MockResponse(status, content=b"foo")
+            else:
+                if more_packets:
+                    pkt2 = packet.Packet(packet.NOOP)
+                    p = payload.Payload([returned_packet, pkt2])
+                else:
+                    p = payload.Payload([returned_packet])
+                state["returned_packet"] = {}
+                state["status"] = None
+                state["more_packets"] = False
+                content = p.encode()
+                response = MockResponse(status, headers=headers, content=content)
+        elif method == "POST":
+            response = None if status is None else MockResponse(status)
         return response
 
-    monkeypatch.setattr("trio_engineio.trio_client.EngineIoClient._send_request", _send_request)
+    monkeypatch.setattr(
+        "trio_engineio.trio_client.EngineIoClient._send_request", _send_request
+    )
 
     return state, saved_request
 
@@ -136,7 +192,9 @@ def mock_connect_trio_websocket(monkeypatch):
     state = {"success": True, "return_value": None}
     called_with = {}
 
-    async def connect_websocket(_, host, port, resource, extra_headers=None, use_ssl=False, **kwargs) -> MockWebsocketConnection | None:
+    async def connect_websocket(
+        _, host, port, resource, extra_headers=None, use_ssl=False, **kwargs
+    ) -> MockWebsocketConnection | None:
         called_with["host"] = host
         called_with["port"] = port
         called_with["resource"] = resource
@@ -148,9 +206,26 @@ def mock_connect_trio_websocket(monkeypatch):
             return ws
         raise trio_client.trio_ws.HandshakeError()
 
-    monkeypatch.setattr("trio_engineio.trio_client.trio_ws.connect_websocket", connect_websocket)
+    monkeypatch.setattr(
+        "trio_engineio.trio_client.trio_ws.connect_websocket", connect_websocket
+    )
 
     return state, called_with
+
+
+@pytest.fixture
+def mock_trio_open_memory_channel(monkeypatch):
+    called_with = {}
+
+    def _open_memory_channel(buffer_size):
+        called_with["buffer_size"] = buffer_size
+        return "send_channel", "receive_channel"
+
+    monkeypatch.setattr(
+        "trio_engineio.trio_client.trio.open_memory_channel", _open_memory_channel
+    )
+
+    return called_with
 
 
 @pytest.fixture
@@ -159,6 +234,18 @@ def mock_time(monkeypatch):
         return "123.456"
 
     monkeypatch.setattr("trio_engineio.eio_types.time.time", _time)
+
+
+def mock_trio_nursery_start(nursery):
+    started_tasks = []
+
+    async def _start(fn, *args, **kwargs):
+        started_tasks.append(fn)
+        return
+
+    nursery.start = _start
+
+    return started_tasks
 
 
 class MockCancelScope:
@@ -199,7 +286,8 @@ class MockResponse:
 
 class MockHttpConnectionPool:
     def __init__(self, *args, **kwargs):
-        self.connections = None
+        self.connections = None  # property used for debug in Trio_client._reset().
+        self.has_active_connections = False
         self.closed = False
 
     async def request(
@@ -218,7 +306,8 @@ class MockHttpConnectionPool:
         return MockResponse(200)
 
     async def aclose(self):
-        if self.connections is not None:
+        if self.has_active_connections:
+            # Closing a connection pool with active connections raise a RuntimeError.
             raise RuntimeError
         else:
             self.closed = True
@@ -230,10 +319,13 @@ class MockWebsocketConnection:
         self.sent = []
         self.received = []
         self.close_after_pong = False
+        self.closing_delay = 0
 
     async def send_message(self, msg: str | bytes) -> None:
         if self.closed:
-            closed_reason = trio_client.trio_ws.CloseReason(4001, "TEST_SEND_MESSAGE_CONNECTION_CLOSED")
+            closed_reason = trio_client.trio_ws.CloseReason(
+                4001, "TEST_SEND_MESSAGE_CONNECTION_CLOSED"
+            )
             raise trio_client.trio_ws.ConnectionClosed(closed_reason)
         self.sent.append(msg)
 
@@ -241,7 +333,9 @@ class MockWebsocketConnection:
         try:
             msg = self.received.pop(0)
         except IndexError:
-            closed_reason = trio_client.trio_ws.CloseReason(4002, "TEST_RECEIVE_MESSAGE_NO_MORE_MSG")
+            closed_reason = trio_client.trio_ws.CloseReason(
+                4002, "TEST_RECEIVE_MESSAGE_NO_MORE_MSG"
+            )
             raise trio_client.trio_ws.ConnectionClosed(closed_reason)
         else:
             if msg == "ERROR":
@@ -250,45 +344,56 @@ class MockWebsocketConnection:
                 await trio.sleep(10)
             try:
                 pkt = packet.Packet(encoded_packet=msg)
-                if pkt.packet_type == packet.PONG and pkt.data == "probe" and self.close_after_pong:
+                if (
+                    pkt.packet_type == packet.PONG
+                    and pkt.data == "probe"
+                    and self.close_after_pong
+                ):
                     self.closed = True
             except Exception as e:
                 pass
             return msg
 
     async def aclose(self, code=1000, reason=None) -> None:
+        if self.closing_delay > 0:
+            await trio.sleep(self.closing_delay)
         self.closed = True
 
 
 class TestTrioClient:
+    #
+    # `__init__` tests
+    #
     def test_create(self):
         c = trio_client.EngineIoClient()
+
         assert c._handlers == {}
         for attr in [
-            '_base_url',
-            '_transports',
-            '_current_transport',
-            '_sid',
-            '_upgrades',
-            '_ping_interval',
-            '_ping_timeout',
-            '_http',
-            '_ws',
-            '_send_channel',
-            '_receive_channel',
-            '_ping_task_scope',
-            '_write_task_scope',
-            '_read_task_scope',
+            "_base_url",
+            "_current_transport",
+            "_sid",
+            "_upgrades",
+            "_ping_interval",
+            "_ping_timeout",
+            "_http",
+            "_ws",
+            "_send_channel",
+            "_receive_channel",
+            "_ping_task_scope",
+            "_write_task_scope",
+            "_read_task_scope",
         ]:
-            assert getattr(c, attr) is None, attr + ' is not None'
+            assert getattr(c, attr) is None, attr + " is not None"
         assert c._pong_received
-        assert c.state == 'disconnected'
+        assert c.state == "disconnected"
+        assert c._transports == ["polling", "websocket"]
 
     def test_custon_json(self):
         assert packet.Packet.json == json
 
-        trio_client.EngineIoClient(json='foo')  # noqa
-        assert packet.Packet.json == 'foo'
+        trio_client.EngineIoClient(json="foo")
+
+        assert packet.Packet.json == "foo"
         packet.Packet.json = json
 
     def test_logger(self):
@@ -304,47 +409,74 @@ class TestTrioClient:
         assert c._logger.getEffectiveLevel() == logging.WARNING
         c._logger.setLevel(logging.NOTSET)
 
-        my_logger = logging.Logger('foo')
+        my_logger = logging.Logger("foo")
         c = trio_client.EngineIoClient(logger=my_logger)
         assert c._logger == my_logger
 
-    def test_custon_timeout(self):
-        c = trio_client.EngineIoClient()
-        assert c._timeouts == {"connect": 5, "read": 5, "write": 5, "pool": 5,}
+    @pytest.mark.parametrize("timeout", (None, 27))
+    def test_custon_timeout(self, timeout):
+        if timeout is None:
+            c = trio_client.EngineIoClient()
+            timeout = 5
+        else:
+            c = trio_client.EngineIoClient(request_timeout=timeout)
 
-        c = trio_client.EngineIoClient(request_timeout=27)
-        assert c._timeouts == {"connect": 27, "read": 27, "write": 27, "pool": 27,}
+        assert c._timeouts == {
+            "connect": timeout,
+            "read": timeout,
+            "write": timeout,
+            "pool": timeout,
+        }
 
-    def test_custon_ssl_verify(self):
-        c = trio_client.EngineIoClient()
-        assert c._ssl_verify
+    @pytest.mark.parametrize("verify", (None, False))
+    def test_custon_ssl_verify(self, verify):
+        if verify is None:
+            c = trio_client.EngineIoClient()
+            verify = True
+        else:
+            c = trio_client.EngineIoClient(ssl_verify=False)
 
-        c = trio_client.EngineIoClient(ssl_verify=False)
-        assert not c._ssl_verify
+        assert c._ssl_verify == verify
 
+    @pytest.mark.parametrize("pool", (None, MockHttpConnectionPool()))
+    def test_custon_http_connection_pool(self, pool):
+        if pool is None:
+            c = trio_client.EngineIoClient()
+        else:
+            c = trio_client.EngineIoClient(http_session=pool)
+
+        assert c._http == pool
+
+    #
+    # `on` tests
+    #
     def test_on_event(self):
         c = trio_client.EngineIoClient()
 
-        @c.on('connect')
+        @c.on("connect")
         def foo():
             pass
 
-        c.on('disconnect', foo)
+        c.on("disconnect", foo)
 
-        assert c._handlers['connect'] == foo
-        assert c._handlers['disconnect'] == foo
+        assert c._handlers["connect"] == foo
+        assert c._handlers["disconnect"] == foo
 
     def test_on_event_invalid(self):
         c = trio_client.EngineIoClient()
-        with pytest.raises(ValueError):
-            c.on('invalid')     # noqa
 
+        with pytest.raises(ValueError):
+            c.on("invalid")
+
+    #
+    # `connect` tests
+    #
     async def test_already_connected(self, nursery):
         c = trio_client.EngineIoClient()
         c.state = "connected"
 
         with pytest.raises(trio_client.EngineIoConnectionError):
-            await c.connect(nursery, 'http://foo')
+            await c.connect(nursery, "http://foo")
 
     async def test_bad_connection_args(self, nursery):
         c = trio_client.EngineIoClient()
@@ -356,127 +488,121 @@ class TestTrioClient:
         c = trio_client.EngineIoClient()
 
         with pytest.raises(trio_client.EngineIoConnectionError):
-            await c.connect(nursery, 'http://foo', transports=['foo', 'bar'])   # noqa
+            await c.connect(nursery, "http://foo", transports=["foo", "bar"])
 
-    async def test_some_invalid_transports(self, nursery, mocker):
+    async def test_some_invalid_transports(self, nursery, mock_connect_websocket):
         c = trio_client.EngineIoClient()
 
-        async def _connect_websocket(*args, **kwargs):
-            return True
+        await c.connect(nursery, "http://foo", transports=["foo", "websocket", "bar"])
+        assert c._transports == ["websocket"]
 
-        mocker.patch.object(c, "_connect_websocket", _connect_websocket)
-
-        await c.connect(nursery, 'http://foo', transports=['foo', 'websocket', 'bar'])  # noqa
-        assert c._transports == ['websocket']
-
-    # async def test_some_invalid_transports(self, nursery, monkeypatch):
-    #     c = trio_client.EngineIoClient()
-    #
-    #     async def _connect_websocket(*args, **kwargs):
-    #         return True
-    #
-    #     monkeypatch.setattr(c, "_connect_websocket", _connect_websocket)
-    #
-    #     await c.connect(nursery, 'http://foo', transports=['foo', 'websocket', 'bar'])  # noqa
-    #     assert c._transports == ['websocket']
-
-    async def test_connect_polling(self, nursery, mock_connect_polling):
+    @pytest.mark.parametrize(
+        "transports", (None, ["polling"], ["polling", "websocket"])
+    )
+    async def test_connect_polling(
+        self, transports, nursery, mock_connect_polling, mock_trio_open_memory_channel
+    ):
         c = trio_client.EngineIoClient()
 
-        assert await c.connect(nursery, 'http://foo')
-        assert mock_connect_polling["url"] == b'http://foo/'
+        if transports is None:
+            connected = await c.connect(nursery, "http://foo:3000")
+        else:
+            connected = await c.connect(
+                nursery, "http://foo:3000", transports=transports
+            )
+
+        assert connected
+        assert c._send_channel == "send_channel"
+        assert c._receive_channel == "receive_channel"
+        assert mock_trio_open_memory_channel["buffer_size"] == 10
+        assert mock_connect_polling["url"] == b"http://foo:3000/"
         assert mock_connect_polling["headers"] == []
         assert mock_connect_polling["engineio_path"] == b"/engine.io"
 
+    @pytest.mark.parametrize("transports", (["websocket"], "websocket"))
+    async def test_connect_websocket(self, transports, nursery, mock_connect_websocket):
         c = trio_client.EngineIoClient()
 
-        assert await c.connect(nursery, 'http://foo', transports=['polling'])
-        assert mock_connect_polling["url"] == b'http://foo/'
-        assert mock_connect_polling["headers"] == []
-        assert mock_connect_polling["engineio_path"] == b"/engine.io"
+        _state, called_with = mock_connect_websocket
 
-        c = trio_client.EngineIoClient()
+        connected = await c.connect(nursery, "ws://foo", transports=transports)
 
-        assert await c.connect(nursery, 'http://foo', transports=['polling', 'websocket'])
-        assert mock_connect_polling["url"] == b'http://foo/'
-        assert mock_connect_polling["headers"] == []
-        assert mock_connect_polling["engineio_path"] == b"/engine.io"
-
-    async def test_connect_websocket(self, nursery, mock_connect_websocket):
-        c = trio_client.EngineIoClient()
-
-        assert await c.connect(nursery, 'http://foo', transports=['websocket'])
-        assert mock_connect_websocket["url"] == b'http://foo/'
-        assert mock_connect_websocket["headers"] == []
-        assert mock_connect_websocket["engineio_path"] == b"/engine.io"
-
-        c = trio_client.EngineIoClient()
-
-        assert await c.connect(nursery, 'http://foo', transports='websocket')
-        assert mock_connect_websocket["url"] == b'http://foo/'
-        assert mock_connect_websocket["headers"] == []
-        assert mock_connect_websocket["engineio_path"] == b"/engine.io"
+        assert connected
+        assert called_with["url"] == b"ws://foo/"
+        assert called_with["headers"] == []
+        assert called_with["engineio_path"] == b"/engine.io"
 
     async def test_connect_query_string(self, nursery, mock_connect_polling):
         c = trio_client.EngineIoClient()
 
-        assert await c.connect(nursery, 'http://foo?bar=baz')
-        assert mock_connect_polling["url"] == b'http://foo/?bar=baz'
+        assert await c.connect(nursery, "http://foo?bar=baz")
+        assert mock_connect_polling["url"] == b"http://foo/?bar=baz"
         assert mock_connect_polling["headers"] == []
         assert mock_connect_polling["engineio_path"] == b"/engine.io"
 
     async def test_connect_custom_headers(self, nursery, mock_connect_polling):
         c = trio_client.EngineIoClient()
 
-        assert await c.connect(nursery, 'http://foo', headers={'Foo': 'Bar'})
-        assert mock_connect_polling["url"] == b'http://foo/'
+        assert await c.connect(nursery, "http://foo", headers={"Foo": "Bar"})
+        assert mock_connect_polling["url"] == b"http://foo/"
         assert mock_connect_polling["headers"] == [(b"Foo", b"Bar")]
         assert mock_connect_polling["engineio_path"] == b"/engine.io"
 
-    async def test_send(self, mock_send_packet):
+    async def test_connect_custom_path(self, nursery, mock_connect_polling):
+        c = trio_client.EngineIoClient()
+
+        assert await c.connect(nursery, "http://foo", engineio_path="/socket.io")
+        assert mock_connect_polling["url"] == b"http://foo/"
+        assert mock_connect_polling["headers"] == []
+        assert mock_connect_polling["engineio_path"] == b"/socket.io"
+
+    #
+    # `send` tests
+    #
+    @pytest.mark.parametrize("data", ("foo", b"foo"))
+    @pytest.mark.parametrize("binary", (None, False, True))
+    async def test_send(self, data, binary, mock_send_packet):
         c = trio_client.EngineIoClient()
         c.state = "connected"
 
-        await c.send('foo')
-        await c.send('foo', binary=False)
-        await c.send(b'foo', binary=True)
+        if binary is None:
+            binary = isinstance(data, bytes)
+            await c.send(data)
+        else:
+            await c.send(data, binary=binary)
 
         assert mock_send_packet[0].packet_type == packet.MESSAGE
-        assert mock_send_packet[0].data == 'foo'
-        assert mock_send_packet[0].binary == False
-
-        assert mock_send_packet[1].packet_type == packet.MESSAGE
-        assert mock_send_packet[1].data == 'foo'
-        assert not mock_send_packet[1].binary
-
-        assert mock_send_packet[2].packet_type == packet.MESSAGE
-        assert mock_send_packet[2].data == b'foo'
-        assert mock_send_packet[2].binary
+        assert mock_send_packet[0].data == data
+        assert mock_send_packet[0].binary == binary
 
     async def test_send_not_connected(self, mock_send_packet):
         c = trio_client.EngineIoClient()
-        c.state = 'foo'
+        c.state = "foo"
 
-        await c.send('bar')
+        await c.send("bar")
 
         assert len(mock_send_packet) == 0
 
+    #
+    # `disconnect` tests
+    #
     async def test_disconnect_not_connected(self):
         c = trio_client.EngineIoClient()
-        c.state = 'foo'
-        c.sid = 'bar'
+        c.state = "foo"
+        c._sid = "bar"
+        c._current_transport = "baz"
 
         await c.disconnect()
 
-        assert c.state == 'disconnected'
+        assert c.state == "disconnected"
         assert c._sid is None
         assert c._current_transport is None
 
     async def test_disconnect(self, mock_send_packet, mock_trigger_event):
         c = trio_client.EngineIoClient()
         trio_client.connected_clients.append(c)
-        c.state = 'connected'
-        c._current_transport = 'polling'
+        c.state = "connected"
+        c._current_transport = "polling"
         c._ping_task_scope = MockCancelScope()
 
         await c.disconnect()
@@ -488,268 +614,399 @@ class TestTrioClient:
         assert c.state == "disconnected"
         assert c not in trio_client.connected_clients
 
-    async def test_sleep(self):
+    #
+    # `transport` tests
+    #
+    @pytest.mark.parametrize("transport", (None, "a_transport"))
+    async def test_transport(self, transport):
         c = trio_client.EngineIoClient()
-        await c.sleep(0)
+        c._current_transport = transport
 
-    @pytest.mark.parametrize(("connections", "closed"), ((None, True), ("c1", False)))
-    async def test_reset_polling(self, connections, closed):
+        assert c.transport() == transport
+
+    #
+    # `sleep` tests
+    #
+    async def test_sleep(self, autojump_clock):
+        c = trio_client.EngineIoClient()
+        start_time = trio.current_time()
+
+        await c.sleep(5)
+
+        end_time = trio.current_time()
+        assert end_time - start_time == 5
+
+    #
+    # `_reset` tests
+    #
+    @pytest.mark.parametrize(
+        "has_active_connections, should_close", ((False, True), (True, False))
+    )
+    async def test_reset_polling(self, has_active_connections, should_close):
         c = trio_client.EngineIoClient()
         c.state = "connected"
         c._sid = "123"
         c._current_transport = "polling"
         c._http = MockHttpConnectionPool()
-        c._http.connections = connections
+        c._http.has_active_connections = has_active_connections
 
         await c._reset()
 
-        assert c._http.closed == closed
-        assert c.state == 'disconnected'
+        assert c._http.closed == should_close
+        assert c.state == "disconnected"
         assert c._sid is None
         assert c._current_transport is None
 
-    @pytest.mark.parametrize("closed", (True, False))
-    async def test_reset_websocket(self, closed):
-        c = trio_client.EngineIoClient()
+    @pytest.mark.parametrize(
+        "was_closed, timeout, should_close",
+        ((True, False, True), (False, False, True), (False, True, False)),
+    )
+    async def test_reset_websocket(
+        self, was_closed, timeout, should_close, autojump_clock
+    ):
+        c = trio_client.EngineIoClient(request_timeout=10)
         c.state = "connected"
         c._sid = "123"
         c._current_transport = "websocket"
         c._ws = MockWebsocketConnection()
-        c._ws.closed = closed
+        c._ws.closed = was_closed
+        c._ws.closing_delay = 20 if timeout else 0
 
         await c._reset()
 
-        assert c._ws.closed
-        assert c.state == 'disconnected'
+        assert c._ws.closed == should_close
+        assert c.state == "disconnected"
         assert c._sid is None
         assert c._current_transport is None
 
-    async def test_polling_connection_failed(self, nursery, mock_time, mock_send_request):
+    #
+    # `_connect_polling` tests
+    #
+    async def test_polling_connection_failed(
+        self, nursery, mock_time, mock_send_request, mock_reset
+    ):
         c = trio_client.EngineIoClient()
 
-        async def fake_reset():
-            return
-
         state, saved_request = mock_send_request
-        state["mode"] = "connect"
         state["status"] = None
-        c._reset = fake_reset
 
-        with pytest.raises(EngineIoConnectionError, match="Connection refused by the server"):
-            await c.connect(nursery, 'http://foo', headers={'Foo': 'Bar'})
+        with pytest.raises(
+            EngineIoConnectionError, match="Connection refused by the server"
+        ):
+            await c._connect_polling(
+                nursery, httpcore.URL("http://foo"), [(b"Foo", b"Bar")], b"/socket.io"
+            )
 
         assert saved_request["method"] == "GET"
-        assert bytes(saved_request["url"]) == b"http://foo/engine.io?transport=polling&EIO=3&t=123.456"
+        assert (
+            bytes(saved_request["url"])
+            == b"http://foo/socket.io?transport=polling&EIO=3&t=123.456"
+        )
         assert saved_request["headers"] == [(b"Foo", b"Bar")]
-        assert saved_request["timeouts"] == {"connect": 5.0, "read": 5.0, "write": 5.0, "pool": 5.0}
+        assert saved_request["timeouts"] == {
+            "connect": 5.0,
+            "read": 5.0,
+            "write": 5.0,
+            "pool": 5.0,
+        }
+        assert len(mock_reset) == 1
 
-    async def test_polling_connection_404(self, nursery, mock_time, mock_send_request):
+    async def test_polling_connection_404(
+        self, nursery, mock_time, mock_send_request, mock_reset
+    ):
         c = trio_client.EngineIoClient()
 
-        async def fake_reset():
-            return
-
         state, saved_request = mock_send_request
-        state["mode"] = "connect"
         state["status"] = 404
-        c._reset = fake_reset
 
         with pytest.raises(EngineIoConnectionError) as excinfo:
-            await c.connect(nursery, 'http://foo/engine.io')
-        assert str(excinfo.value) == "Unexpected status code 404 in server response"
-        assert bytes(saved_request["url"]) == b"http://foo/engine.io?transport=polling&EIO=3&t=123.456"
+            await c._connect_polling(
+                nursery, httpcore.URL("http://foo"), [], b"/engine.io"
+            )
 
-    async def test_polling_connection_invalid_packet(self, nursery, mock_time, mock_send_request):
+        assert str(excinfo.value) == "Unexpected status code 404 in server response"
+        assert (
+            bytes(saved_request["url"])
+            == b"http://foo/engine.io?transport=polling&EIO=3&t=123.456"
+        )
+        assert len(mock_reset) == 1
+
+    async def test_polling_connection_invalid_packet(
+        self, nursery, mock_time, mock_send_request, mock_reset
+    ):
         c = trio_client.EngineIoClient()
 
-        async def fake_reset():
-            return
-
         state, saved_request = mock_send_request
-        state["mode"] = "connect"
         state["status"] = 200
         state["returned_packet"] = "INVALID"
-        c._reset = fake_reset
 
-        with pytest.raises(EngineIoConnectionError, match="Unexpected response from server"):
-            await c.connect(nursery, 'http://foo/socket.io')
-        assert bytes(saved_request["url"]) == b"http://foo/socket.io?transport=polling&EIO=3&t=123.456"
+        with pytest.raises(
+            EngineIoConnectionError, match="Unexpected response from server"
+        ):
+            await c._connect_polling(
+                nursery, httpcore.URL("http://foo"), [], b"/socket.io"
+            )
 
-    async def test_polling_connection_no_open_packet(self, nursery, mock_send_request):
+        assert (
+            bytes(saved_request["url"])
+            == b"http://foo/socket.io?transport=polling&EIO=3&t=123.456"
+        )
+        assert len(mock_reset) == 1
+
+    async def test_polling_connection_no_open_packet(
+        self, nursery, mock_time, mock_send_request, mock_reset
+    ):
         c = trio_client.EngineIoClient()
 
-        async def fake_reset():
-            return
-
         state, saved_request = mock_send_request
-        state["mode"] = "connect"
         state["status"] = 200
         state["returned_packet"] = packet.Packet(packet.CLOSE)
-        c._reset = fake_reset
 
-        with pytest.raises(EngineIoConnectionError, match="OPEN packet not returned by server"):
-            await c.connect(nursery, 'http://foo')
+        with pytest.raises(
+            EngineIoConnectionError, match="OPEN packet not returned by server"
+        ):
+            await c._connect_polling(
+                nursery, httpcore.URL("http://foo"), [], b"/socket.io"
+            )
+
+        assert (
+            bytes(saved_request["url"])
+            == b"http://foo/socket.io?transport=polling&EIO=3&t=123.456"
+        )
+        assert len(mock_reset) == 1
 
     @pytest.mark.parametrize("scheme", ("http", "https"))
-    async def test_polling_connection_successful(self, scheme, nursery, mock_time, mock_send_request):
+    async def test_polling_connection_successful(
+        self,
+        scheme,
+        nursery,
+        mock_time,
+        mock_send_request,
+        mock_trigger_event,
+        mock_receive_packet,
+        mock_connect_websocket,
+    ):
         c = trio_client.EngineIoClient()
 
-        started_tasks = []
-        triggered_events = []
-
-        async def fake_start(fn, *args, **kwargs):
-            started_tasks.append(fn)
-            return True
-
-        def on_connect():
-            triggered_events.append("connect")
-
-        c.on("connect", on_connect)
-
         state, saved_request = mock_send_request
-        state["mode"] = "connect"
         state["status"] = 200
         state["returned_packet"] = packet.Packet(
             packet.OPEN,
-            data={"sid": "123", "upgrades": [], "pingInterval": 1000, "pingTimeout": 2000}
+            data={
+                "sid": "123",
+                "upgrades": [],
+                "pingInterval": 1000,
+                "pingTimeout": 2000,
+            },
         )
-        nursery.start = fake_start
+        started_tasks = mock_trio_nursery_start(nursery)
 
-        await c.connect(nursery, f'{scheme}://foo/?test=1')
+        connected = await c._connect_polling(
+            nursery, httpcore.URL(f"{scheme}://foo/?test=1"), [], b"/engine.io"
+        )
 
-        assert c._sid == '123'
+        assert connected
+        assert c._sid == "123"
         assert c._upgrades == []
         assert c._ping_interval == 1
         assert c._ping_timeout == 2
-        assert c.transport() == "polling"
-        assert (
-            bytes(c._base_url)
-            == b'%b://foo/engine.io?test=1&transport=polling&EIO=3&sid=123&t=123.456' % scheme.encode("ascii")
+        assert c._current_transport == "polling"
+        assert bytes(
+            c._base_url
+        ) == b"%b://foo/engine.io?test=1&transport=polling&EIO=3&sid=123&t=123.456" % scheme.encode(
+            "ascii"
         )
         assert c.state == "connected"
         assert c in trio_client.connected_clients
-        assert "connect" in triggered_events
+        assert mock_trigger_event["event"] == "connect"
+        assert mock_trigger_event["args"] == ()
+        assert not mock_trigger_event["run_async"]
+        assert len(mock_receive_packet) == 0
+        assert len(mock_connect_websocket[1]) == 0  # _connect_websocket is not called
         assert c._ping_loop in started_tasks
         assert c._write_loop in started_tasks
         assert c._read_loop_polling in started_tasks
         assert c._read_loop_websocket not in started_tasks
 
-    async def test_polling_connection_with_more_packets(self, nursery, mock_time, mock_send_request):
+    async def test_polling_connection_with_more_packets(
+        self, nursery, mock_time, mock_send_request, mock_receive_packet
+    ):
         c = trio_client.EngineIoClient()
-        received_packets = []
-
-        async def fake_start(*args, **kwargs):
-            return True
-
-        async def _receive_packet(pkt: packet.Packet):
-            received_packets.append((pkt.packet_type, pkt.data))
 
         state, saved_request = mock_send_request
-        state["mode"] = "connect"
         state["status"] = 200
         state["returned_packet"] = packet.Packet(
             packet.OPEN,
-            data={"sid": "123", "upgrades": [], "pingInterval": 1000, "pingTimeout": 2000}
+            data={
+                "sid": "123",
+                "upgrades": [],
+                "pingInterval": 1000,
+                "pingTimeout": 2000,
+            },
         )
         state["more_packets"] = True
-        nursery.start = fake_start
-        c._receive_packet = _receive_packet
+        mock_trio_nursery_start(nursery)
 
-        await c.connect(nursery, f'http://foo')
+        await c._connect_polling(nursery, httpcore.URL("http://foo"), [], b"/engine.io")
 
-        assert (packet.NOOP, None) in received_packets
+        assert mock_receive_packet[0].packet_type == packet.NOOP
 
     async def test_polling_connection_upgraded(
-            self, nursery, mock_time, mock_send_request
+        self,
+        nursery,
+        mock_time,
+        mock_send_request,
+        mock_receive_packet,
+        mock_trigger_event,
+        mock_connect_websocket,
     ):
         c = trio_client.EngineIoClient()
 
-        async def fake_connect_websocket(*args):
-            return True
-
-        c._connect_websocket = fake_connect_websocket
-
-        triggered_events = []
-
-        def on_connect():
-            triggered_events.append("connect")
-
-        c.on("connect", on_connect)
-
         state, saved_request = mock_send_request
-        state["mode"] = "connect"
         state["status"] = 200
         state["returned_packet"] = packet.Packet(
             packet.OPEN,
-            data={"sid": "123", "upgrades": ["websocket"], "pingInterval": 1000, "pingTimeout": 2000}
+            data={
+                "sid": "123",
+                "upgrades": ["websocket"],
+                "pingInterval": 1000,
+                "pingTimeout": 2000,
+            },
+        )
+        started_tasks = mock_trio_nursery_start(nursery)
+
+        connected = await c._connect_polling(
+            nursery, httpcore.URL("http://foo"), [], b"/engine.io"
         )
 
-        await c.connect(nursery, f'http://foo')
-
-        assert c._sid == '123'
+        assert connected
+        assert c._sid == "123"
         assert c._upgrades == ["websocket"]
         assert c._ping_interval == 1
         assert c._ping_timeout == 2
-        assert c.transport() == "polling"
+        assert c._current_transport == "polling"
         assert (
             bytes(c._base_url)
-            == b'http://foo/engine.io?transport=polling&EIO=3&sid=123&t=123.456'
+            == b"http://foo/engine.io?transport=polling&EIO=3&sid=123&t=123.456"
         )
         assert c.state == "connected"
         assert c in trio_client.connected_clients
-        assert "connect" in triggered_events
+        assert mock_trigger_event["event"] == "connect"
+        assert mock_trigger_event["args"] == ()
+        assert not mock_trigger_event["run_async"]
+        assert len(mock_receive_packet) == 0
+        assert len(mock_connect_websocket[1]) == 3  # _connect_websocket called once
+        assert c._ping_loop not in started_tasks
+        assert c._write_loop not in started_tasks
+        assert c._read_loop_polling not in started_tasks
+        assert c._read_loop_websocket not in started_tasks
 
     async def test_polling_connection_not_upgraded(
-            self, nursery, mock_time, mock_send_request
+        self,
+        nursery,
+        mock_time,
+        mock_send_request,
+        mock_receive_packet,
+        mock_trigger_event,
+        mock_connect_websocket,
     ):
         c = trio_client.EngineIoClient()
 
-        started_tasks = []
-        triggered_events = []
-
-        async def fake_connect_websocket(*args):
-            return False
-
-        async def fake_start(fn, *args, **kwargs):
-            started_tasks.append(fn)
-            return True
-
-        def on_connect():
-            triggered_events.append("connect")
-
-        c.on("connect", on_connect)
-
         state, saved_request = mock_send_request
-        state["mode"] = "connect"
         state["status"] = 200
         state["returned_packet"] = packet.Packet(
             packet.OPEN,
-            data={"sid": "123", "upgrades": ["websocket"], "pingInterval": 1000, "pingTimeout": 2000}
+            data={
+                "sid": "123",
+                "upgrades": ["websocket"],
+                "pingInterval": 1000,
+                "pingTimeout": 2000,
+            },
         )
-        c._connect_websocket = fake_connect_websocket
-        nursery.start = fake_start
+        started_tasks = mock_trio_nursery_start(nursery)
+        mock_connect_websocket[0]["success"] = False
 
-        await c.connect(nursery, f'http://foo')
+        connected = await c._connect_polling(
+            nursery, httpcore.URL("http://foo"), [], b"/engine.io"
+        )
 
-        assert c._sid == '123'
+        assert connected
+        assert c._sid == "123"
         assert c._upgrades == ["websocket"]
         assert c._ping_interval == 1
         assert c._ping_timeout == 2
-        assert c.transport() == "polling"
+        assert c._current_transport == "polling"
         assert (
             bytes(c._base_url)
-            == b'http://foo/engine.io?transport=polling&EIO=3&sid=123&t=123.456'
+            == b"http://foo/engine.io?transport=polling&EIO=3&sid=123&t=123.456"
         )
         assert c.state == "connected"
         assert c in trio_client.connected_clients
-        assert "connect" in triggered_events
+        assert mock_trigger_event["event"] == "connect"
+        assert mock_trigger_event["args"] == ()
+        assert not mock_trigger_event["run_async"]
+        assert len(mock_receive_packet) == 0
         assert c._ping_loop in started_tasks
         assert c._write_loop in started_tasks
         assert c._read_loop_polling in started_tasks
         assert c._read_loop_websocket not in started_tasks
 
+    async def test_polling_connection_no_upgrade(
+        self,
+        nursery,
+        mock_time,
+        mock_send_request,
+        mock_receive_packet,
+        mock_trigger_event,
+        mock_connect_websocket,
+    ):
+        c = trio_client.EngineIoClient()
+        c._transports = ["polling"]
+
+        state, saved_request = mock_send_request
+        state["status"] = 200
+        state["returned_packet"] = packet.Packet(
+            packet.OPEN,
+            data={
+                "sid": "123",
+                "upgrades": ["websocket"],
+                "pingInterval": 1000,
+                "pingTimeout": 2000,
+            },
+        )
+        started_tasks = mock_trio_nursery_start(nursery)
+
+        connected = await c._connect_polling(
+            nursery, httpcore.URL("http://foo"), [], b"/engine.io"
+        )
+
+        assert connected
+        assert c._sid == "123"
+        assert c._upgrades == ["websocket"]
+        assert c._ping_interval == 1
+        assert c._ping_timeout == 2
+        assert c._current_transport == "polling"
+        assert (
+            bytes(c._base_url)
+            == b"http://foo/engine.io?transport=polling&EIO=3&sid=123&t=123.456"
+        )
+        assert c.state == "connected"
+        assert c in trio_client.connected_clients
+        assert mock_trigger_event["event"] == "connect"
+        assert mock_trigger_event["args"] == ()
+        assert not mock_trigger_event["run_async"]
+        assert len(mock_receive_packet) == 0
+        assert len(mock_connect_websocket[1]) == 0  # _connect_websocket is not called
+        assert c._ping_loop in started_tasks
+        assert c._write_loop in started_tasks
+        assert c._read_loop_polling in started_tasks
+        assert c._read_loop_websocket not in started_tasks
+
+    #
+    # `_connect_websocket` tests
+    #
     async def test_websocket_connection_failed(
-            self, nursery, mock_time, mock_connect_trio_websocket
+        self, nursery, mock_time, mock_connect_trio_websocket
     ):
         c = trio_client.EngineIoClient()
 
@@ -757,37 +1014,45 @@ class TestTrioClient:
         state["success"] = False
 
         with pytest.raises(EngineIoConnectionError, match="Websocket connection error"):
-            await c.connect(
-                nursery, 'http://foo', transports=["websocket"], headers={'Foo': 'Bar'}
+            await c._connect_websocket(
+                nursery, httpcore.URL("http://foo"), [(b"Foo", b"Bar")], b"/socket.io"
             )
         assert called_with["host"] == "foo"
         assert called_with["port"] is None
-        assert called_with["resource"] == "/engine.io?transport=websocket&EIO=3&t=123.456"
+        assert (
+            called_with["resource"] == "/socket.io?transport=websocket&EIO=3&t=123.456"
+        )
         assert called_with["extra_headers"] == [(b"Foo", b"Bar")]
         assert not called_with["use_ssl"]
 
-    async def test_websocket_upgrade_failed(self, nursery, mock_time, mock_connect_trio_websocket):
+    async def test_websocket_upgrade_failed(
+        self, nursery, mock_time, mock_connect_trio_websocket
+    ):
         c = trio_client.EngineIoClient()
         c._sid = "123"
 
         state, called_with = mock_connect_trio_websocket
         state["success"] = False
 
-        assert not await c.connect(nursery, 'http://foo:1234', transports=["websocket"])
+        connected = await c._connect_websocket(
+            nursery, httpcore.URL("http://foo:1234"), [], b"/engine.io"
+        )
+
+        assert not connected
         assert called_with["host"] == "foo"
         assert called_with["port"] == 1234
-        assert called_with["resource"] == "/engine.io?transport=websocket&EIO=3&sid=123&t=123.456"
+        assert (
+            called_with["resource"]
+            == "/engine.io?transport=websocket&EIO=3&sid=123&t=123.456"
+        )
         assert called_with["extra_headers"] == []
         assert not called_with["use_ssl"]
 
     @pytest.mark.parametrize("closed", (True, False))
     async def test_websocket_connection_no_open_packet(
-            self, closed, nursery, mock_connect_trio_websocket
+        self, closed, nursery, mock_connect_trio_websocket, mock_reset
     ):
         c = trio_client.EngineIoClient()
-
-        async def fake_reset():
-            return
 
         state, called_with = mock_connect_trio_websocket
         state["success"] = True
@@ -795,32 +1060,34 @@ class TestTrioClient:
         if closed:
             ws.closed = closed
             match = "Unexpected recv exception"
+            reset_calls = 0
         else:
             ws.received = [packet.Packet(packet.CLOSE).encode()]
             match = "no OPEN packet"
+            reset_calls = 1
         state["return_value"] = ws
-        c._reset = fake_reset
 
         with pytest.raises(EngineIoConnectionError, match=match):
-            await c.connect(nursery, 'http://foo', transports=["websocket"])
+            await c._connect_websocket(
+                nursery, httpcore.URL("http://foo"), [], b"/engine.io"
+            )
+        assert (
+            len(mock_reset) == reset_calls
+        )  # _reset called once if connection is open
 
-    @pytest.mark.parametrize(("scheme", "ssl_verify"), (("ws", True), ("wss", True), ("wss", False)))
+    @pytest.mark.parametrize(
+        "scheme, ssl_verify", (("ws", True), ("wss", True), ("wss", False))
+    )
     async def test_websocket_connection_successful(
-            self, scheme, ssl_verify, nursery, mock_time, mock_connect_trio_websocket
+        self,
+        scheme,
+        ssl_verify,
+        nursery,
+        mock_time,
+        mock_connect_trio_websocket,
+        mock_trigger_event,
     ):
         c = trio_client.EngineIoClient(ssl_verify=ssl_verify)
-
-        started_tasks = []
-        triggered_events = []
-
-        async def fake_start(fn, *args, **kwargs):
-            started_tasks.append(fn)
-            return True
-
-        def on_connect():
-            triggered_events.append("connect")
-
-        c.on("connect", on_connect)
 
         state, called_with = mock_connect_trio_websocket
         state["success"] = True
@@ -828,25 +1095,37 @@ class TestTrioClient:
         ws.received = [
             packet.Packet(
                 packet.OPEN,
-                data={"sid": "123", "upgrades": [], "pingInterval": 1000, "pingTimeout": 2000}
+                data={
+                    "sid": "123",
+                    "upgrades": [],
+                    "pingInterval": 1000,
+                    "pingTimeout": 2000,
+                },
             ).encode()
         ]
         state["return_value"] = ws
-        nursery.start = fake_start
+        started_tasks = mock_trio_nursery_start(nursery)
 
-        assert await c.connect(nursery, f'{scheme}://foo', transports=["websocket"])
-        assert c._sid == '123'
+        connected = await c._connect_websocket(
+            nursery, httpcore.URL(f"{scheme}://foo"), [], b"/engine.io"
+        )
+
+        assert connected
+        assert c._sid == "123"
         assert c._upgrades == []
         assert c._ping_interval == 1
         assert c._ping_timeout == 2
-        assert c.transport() == "websocket"
-        assert (
-            bytes(c._base_url)
-            == b'%b://foo/engine.io?transport=websocket&EIO=3&t=123.456' % scheme.encode("ascii")
+        assert c._current_transport == "websocket"
+        assert bytes(
+            c._base_url
+        ) == b"%b://foo/engine.io?transport=websocket&EIO=3&t=123.456" % scheme.encode(
+            "ascii"
         )
         assert c.state == "connected"
         assert c in trio_client.connected_clients
-        assert "connect" in triggered_events
+        assert mock_trigger_event["event"] == "connect"
+        assert mock_trigger_event["args"] == ()
+        assert not mock_trigger_event["run_async"]
         assert c._ws == ws
         assert c._ping_loop in started_tasks
         assert c._write_loop in started_tasks
@@ -860,101 +1139,74 @@ class TestTrioClient:
 
     @pytest.mark.parametrize("closed", (True, False))
     async def test_websocket_upgrade_ping_handshake_failed(
-            self, closed, nursery, mock_connect_trio_websocket
+        self, closed, nursery, mock_connect_trio_websocket, mock_trigger_event
     ):
         c = trio_client.EngineIoClient()
         c._sid = "123"
         c._current_transport = "polling"
-
-        started_tasks = []
-        triggered_events = []
-
-        async def fake_start(fn, *args, **kwargs):
-            started_tasks.append(fn)
-            return True
-
-        def on_connect():
-            triggered_events.append("connect")
-
-        c.on("connect", on_connect)
 
         state, called_with = mock_connect_trio_websocket
         state["success"] = True
         ws = MockWebsocketConnection()
         ws.closed = closed
         state["return_value"] = ws
-        nursery.start = fake_start
+        started_tasks = mock_trio_nursery_start(nursery)
 
-        assert not await c.connect(nursery, f'ws://foo', transports=["websocket"])
+        connected = await c._connect_websocket(
+            nursery, httpcore.URL("ws://foo"), [], b"/engine.io"
+        )
+
+        assert not connected
         if closed:
             assert len(ws.sent) == 0
         else:
-            assert ws.sent[0] == packet.Packet(packet.PING, data="probe").encode(always_bytes=False)
-        assert c.transport() == "polling"
-        assert "connect" not in triggered_events
+            assert ws.sent[0] == packet.Packet(packet.PING, data="probe").encode(
+                always_bytes=False
+            )
+        assert c._current_transport == "polling"
+        assert mock_trigger_event == {}  # _trigger_vent is not called
         assert c._ping_loop not in started_tasks
         assert c._write_loop not in started_tasks
         assert c._read_loop_websocket not in started_tasks
         assert c._read_loop_polling not in started_tasks
 
+    @pytest.mark.parametrize("pong_status", (None, "BAD"))
     async def test_websocket_upgrade_no_pong(
-            self, nursery, mock_connect_trio_websocket
+        self, pong_status, nursery, mock_connect_trio_websocket, mock_trigger_event
     ):
         c = trio_client.EngineIoClient()
         c._sid = "123"
         c._current_transport = "polling"
 
-        started_tasks = []
-        triggered_events = []
-
-        async def fake_start(fn, *args, **kwargs):
-            started_tasks.append(fn)
-            return True
-
-        def on_connect():
-            triggered_events.append("connect")
-
-        c.on("connect", on_connect)
-
         state, called_with = mock_connect_trio_websocket
         state["success"] = True
         ws = MockWebsocketConnection()
-        ws.received = [
-            packet.Packet(
-                packet.OPEN,
-                data={"sid": "123", "upgrades": [], "pingInterval": 1000, "pingTimeout": 2000}
-            ).encode()
-        ]
+        if pong_status is not None:
+            ws.received = [packet.Packet(packet.PONG, data="eborp").encode()]
         state["return_value"] = ws
-        nursery.start = fake_start
+        started_tasks = mock_trio_nursery_start(nursery)
 
-        assert not await c.connect(nursery, f'ws://foo', transports=["websocket"])
-        assert ws.sent[0] == packet.Packet(packet.PING, data="probe").encode(always_bytes=False)
-        assert c.transport() == "polling"
-        assert "connect" not in triggered_events
+        connected = await c._connect_websocket(
+            nursery, httpcore.URL("ws://foo"), [], b"/engine.io"
+        )
+
+        assert not connected
+        assert ws.sent[0] == packet.Packet(packet.PING, data="probe").encode(
+            always_bytes=False
+        )
+        assert c._current_transport == "polling"
+        assert mock_trigger_event == {}  # _trigger_vent is not called
         assert c._ping_loop not in started_tasks
         assert c._write_loop not in started_tasks
         assert c._read_loop_websocket not in started_tasks
         assert c._read_loop_polling not in started_tasks
 
     async def test_websocket_upgrade_upgrade_sending_failed(
-            self, nursery, mock_connect_trio_websocket
+        self, nursery, mock_connect_trio_websocket, mock_trigger_event
     ):
         c = trio_client.EngineIoClient()
         c._sid = "123"
         c._current_transport = "polling"
-
-        started_tasks = []
-        triggered_events = []
-
-        async def fake_start(fn, *args, **kwargs):
-            started_tasks.append(fn)
-            return True
-
-        def on_connect():
-            triggered_events.append("connect")
-
-        c.on("connect", on_connect)
 
         state, called_with = mock_connect_trio_websocket
         state["success"] = True
@@ -962,18 +1214,26 @@ class TestTrioClient:
         ws.received = [packet.Packet(packet.PONG, data="probe").encode()]
         ws.close_after_pong = True
         state["return_value"] = ws
-        nursery.start = fake_start
+        started_tasks = mock_trio_nursery_start(nursery)
 
-        assert not await c.connect(nursery, f'ws://foo', transports=["websocket"])
-        assert ws.sent[0] == packet.Packet(packet.PING, data="probe").encode(always_bytes=False)
-        assert c.transport() == "polling"
-        assert "connect" not in triggered_events
+        connected = await c._connect_websocket(
+            nursery, httpcore.URL("ws://foo"), [], b"/engine.io"
+        )
+
+        assert not connected
+        assert ws.sent[0] == packet.Packet(packet.PING, data="probe").encode(
+            always_bytes=False
+        )
+        assert c._current_transport == "polling"
+        assert mock_trigger_event == {}  # _trigger_vent is not called
         assert c._ping_loop not in started_tasks
         assert c._write_loop not in started_tasks
         assert c._read_loop_websocket not in started_tasks
         assert c._read_loop_polling not in started_tasks
 
-    async def test_websocket_upgrade_successful(self, nursery, mock_time, mock_connect_trio_websocket):
+    async def test_websocket_upgrade_successful(
+        self, nursery, mock_time, mock_connect_trio_websocket, mock_trigger_event
+    ):
         c = trio_client.EngineIoClient()
         c._sid = "123"
         c._current_transport = "polling"
@@ -981,49 +1241,48 @@ class TestTrioClient:
             scheme=b"http",
             host=b"foo",
             port=None,
-            target=b"/engine.io?transport=polling&EIO=3&sid=123"
+            target=b"/engine.io?transport=polling&EIO=3&sid=123",
         )
-
-        started_tasks = []
-        triggered_events = []
-
-        async def fake_start(fn, *args, **kwargs):
-            started_tasks.append(fn)
-            return True
-
-        def on_connect():
-            triggered_events.append("connect")
-
-        c.on("connect", on_connect)
 
         state, called_with = mock_connect_trio_websocket
         state["success"] = True
         ws = MockWebsocketConnection()
         ws.received = [packet.Packet(packet.PONG, data="probe").encode()]
         state["return_value"] = ws
-        nursery.start = fake_start
+        started_tasks = mock_trio_nursery_start(nursery)
 
-        assert await c.connect(nursery, f'ws://foo', transports=["websocket"])
-        assert ws.sent[0] == packet.Packet(packet.PING, data="probe").encode(always_bytes=False)
+        connected = await c._connect_websocket(
+            nursery, httpcore.URL("ws://foo"), [], b"/engine.io"
+        )
+
+        assert connected
+        assert ws.sent[0] == packet.Packet(packet.PING, data="probe").encode(
+            always_bytes=False
+        )
         assert ws.sent[1] == packet.Packet(packet.UPGRADE).encode(always_bytes=False)
-        assert c._sid == '123'  # not changed
+        assert c._sid == "123"  # not changed
         assert (
             bytes(c._base_url)
-            == b'http://foo/engine.io?transport=polling&EIO=3&sid=123&t=123.456'
-        )   # not changed except t=... set when accessing the _base_url.target property
-        assert c not in trio_client.connected_clients   # was added by polling connection
-        assert "connect" not in triggered_events    # was called by polling connection
-        assert c.transport() == "websocket"
+            == b"http://foo/engine.io?transport=polling&EIO=3&sid=123&t=123.456"
+        )  # not changed except t=... set when accessing the _base_url.target property
+        assert c not in trio_client.connected_clients  # was added by polling connection
+        assert (
+            mock_trigger_event == {}
+        )  # _trigger_vent was called by polling connection
+        assert c._current_transport == "websocket"
         assert c._ws == ws
         assert c._ping_loop in started_tasks
         assert c._write_loop in started_tasks
         assert c._read_loop_websocket in started_tasks
         assert c._read_loop_polling not in started_tasks
 
+    #
+    # `_receive_packet` tests
+    #
     async def test_receive_unknown_packet(self):
         c = trio_client.EngineIoClient()
 
-        await c._receive_packet(packet.Packet(encoded_packet=b'9'))
+        await c._receive_packet(packet.Packet(encoded_packet=b"9"))
         # should be ignored
 
     async def test_receive_noop_packet(self):
@@ -1043,30 +1302,26 @@ class TestTrioClient:
     async def test_receive_message_packet(self, mock_trigger_event):
         c = trio_client.EngineIoClient()
 
-        await c._receive_packet(packet.Packet(packet.MESSAGE, {'foo': 'bar'}))
+        await c._receive_packet(packet.Packet(packet.MESSAGE, {"foo": "bar"}))
 
         assert mock_trigger_event["event"] == "message"
-        assert mock_trigger_event["args"] == ({'foo': 'bar'},)
+        assert mock_trigger_event["args"] == ({"foo": "bar"},)
         assert mock_trigger_event["run_async"]
 
-    async def test_receive_close_packet(self):
+    async def test_receive_close_packet(self, mock_disconnect):
         c = trio_client.EngineIoClient()
-
-        disconnect_calls = []
-
-        async def fake_disconnect():
-            disconnect_calls.append(True)
-
-        c.disconnect = fake_disconnect
 
         await c._receive_packet(packet.Packet(packet.CLOSE))
 
-        assert disconnect_calls[0]
+        assert len(mock_disconnect) == 1  # disconnect is called once
 
+    #
+    # `_send_packet` tests
+    #
     async def test_send_packet_disconnected(self):
         c = trio_client.EngineIoClient()
-        c.state = 'disconnected'
-        c._send_channel, c._receive_channel = trio.open_memory_channel(1)
+        c.state = "disconnected"
+        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
 
         await c._send_packet(packet.Packet(packet.NOOP))
 
@@ -1075,8 +1330,8 @@ class TestTrioClient:
 
     async def test_send_packet(self):
         c = trio_client.EngineIoClient()
-        c.state = 'connected'
-        c._send_channel, c._receive_channel = trio.open_memory_channel(1)
+        c.state = "connected"
+        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
 
         await c._send_packet(packet.Packet(packet.NOOP))
 
@@ -1096,6 +1351,9 @@ class TestTrioClient:
         else:
             assert r.status == 200
 
+    #
+    # `_send_request` tests
+    #
     async def test_send_request_with_http(self):
         c = trio_client.EngineIoClient()
         c._http = MockHttpConnectionPool()
@@ -1104,89 +1362,82 @@ class TestTrioClient:
 
         assert r.status == 200
 
+    #
+    # `_trigger_event` tests
+    #
     async def test_trigger_event_function(self):
         result = []
 
         def foo_handler(arg):
-            result.append('ok')
+            result.append("ok")
             result.append(arg)
 
         c = trio_client.EngineIoClient()
-        c.on('message', handler=foo_handler)
+        c.on("message", handler=foo_handler)
 
-        await c._trigger_event('message', 'bar')
+        await c._trigger_event("message", "bar")
 
-        assert result == ['ok', 'bar']
+        assert result == ["ok", "bar"]
 
     async def test_trigger_event_coroutine(self):
         result = []
 
         async def foo_handler(arg):
-            result.append('ok')
+            result.append("ok")
             result.append(arg)
 
         c = trio_client.EngineIoClient()
-        c.on('message', handler=foo_handler)
+        c.on("message", handler=foo_handler)
 
-        await c._trigger_event('message', 'bar')
+        await c._trigger_event("message", "bar")
 
-        assert result == ['ok', 'bar']
+        assert result == ["ok", "bar"]
 
     async def test_trigger_event_function_error(self):
-        def connect_handler(_arg):
-            return 1 / 0
-
         def foo_handler(_arg):
             return 1 / 0
 
         c = trio_client.EngineIoClient()
-        c.on('connect', handler=connect_handler)
-        c.on('message', handler=foo_handler)
+        c.on("message", handler=foo_handler)
 
-        assert not await c._trigger_event('connect', '123')
-        assert await c._trigger_event('message', 'bar') is None
+        assert await c._trigger_event("message", "bar") is None
 
     async def test_trigger_event_coroutine_error(self):
-        async def connect_handler(arg):
-            return 1 / 0
-
         async def foo_handler(arg):
             return 1 / 0
 
         c = trio_client.EngineIoClient()
-        c.on('connect', handler=connect_handler)
-        c.on('message', handler=foo_handler)
+        c.on("message", handler=foo_handler)
 
-        assert not await c._trigger_event('connect', '123')
-        assert await c._trigger_event('message', 'bar') is None
+        assert await c._trigger_event("message", "bar") is None
 
     async def test_trigger_event_function_async(self):
         result = []
 
         def foo_handler(arg):
-            result.append('ok')
+            result.append("ok")
             result.append(arg)
 
         c = trio_client.EngineIoClient()
-        c.on('message', handler=foo_handler)
+        c.on("message", handler=foo_handler)
 
-        await c._trigger_event('message', 'bar', run_async=True)
+        await c._trigger_event("message", "bar", run_async=True)
 
-        assert result == ['ok', 'bar']
+        assert result == ["ok", "bar"]
 
     async def test_trigger_event_coroutine_async(self):
         result = []
 
         async def foo_handler(arg):
-            result.append('ok')
+            result.append("ok")
             result.append(arg)
 
         c = trio_client.EngineIoClient()
-        c.on('message', handler=foo_handler)
+        c.on("message", handler=foo_handler)
 
-        await c._trigger_event('message', 'bar', run_async=True)
+        await c._trigger_event("message", "bar", run_async=True)
 
-        assert result == ['ok', 'bar']
+        assert result == ["ok", "bar"]
 
     async def test_trigger_event_function_async_error(self):
         result = []
@@ -1196,11 +1447,11 @@ class TestTrioClient:
             return 1 / 0
 
         c = trio_client.EngineIoClient()
-        c.on('message', handler=foo_handler)
+        c.on("message", handler=foo_handler)
 
-        await c._trigger_event('message', 'bar', run_async=True)
+        await c._trigger_event("message", "bar", run_async=True)
 
-        assert result == ['bar']
+        assert result == ["bar"]
 
     async def test_trigger_event_coroutine_async_error(self):
         result = []
@@ -1210,20 +1461,55 @@ class TestTrioClient:
             return 1 / 0
 
         c = trio_client.EngineIoClient()
-        c.on('message', handler=foo_handler)
+        c.on("message", handler=foo_handler)
 
-        await c._trigger_event('message', 'bar', run_async=True)
+        await c._trigger_event("message", "bar", run_async=True)
 
-        assert result == ['bar']
+        assert result == ["bar"]
 
     async def test_trigger_unknown_event(self):
         c = trio_client.EngineIoClient()
 
-        await c._trigger_event('connect', run_async=False)
-        await c._trigger_event('message', 123, run_async=True)
+        await c._trigger_event("message", 123, run_async=True)
         # should do nothing
 
-    async def test_ping_loop_disconnected(self):
+    #
+    # `_get_engineio_url` tests
+    #
+    @pytest.mark.parametrize("scheme", ("http", "https", "ws", "wss"))
+    @pytest.mark.parametrize(
+        "target, expected_target",
+        (
+            ("/", "/toto?transport={0}&EIO=3&t=123.456"),
+            ("/socket.io", "/socket.io?transport={0}&EIO=3&t=123.456"),
+            (
+                "/socket.io?test=123",
+                "/socket.io?test=123&transport={0}&EIO=3&t=123.456",
+            ),
+        ),
+    )
+    @pytest.mark.parametrize("transport", ("polling", "websocket"))
+    def test_get_engineio_url(
+        self, scheme, target, expected_target, transport, mock_time
+    ):
+        if transport == "polling":
+            expected_scheme = b"https" if scheme in ("https", "wss") else b"http"
+        else:
+            expected_scheme = b"wss" if scheme in ("https", "wss") else b"ws"
+
+        url = httpcore.URL(scheme=scheme, host="foo", port=1234, target=target)
+        c = trio_client.EngineIoClient()
+        engineio_url = c._get_engineio_url(url, b"/toto/", transport)
+
+        assert engineio_url.scheme == expected_scheme
+        assert engineio_url.host == b"foo"
+        assert engineio_url.port == 1234
+        assert engineio_url.target == expected_target.format(transport).encode("ascii")
+
+    #
+    # `_ping_loop` tests
+    #
+    async def test_ping_loop_disconnected(self, autojump_clock):
         c = trio_client.EngineIoClient()
         c.state = "disconnected"
         c._ping_interval = 2
@@ -1231,12 +1517,17 @@ class TestTrioClient:
         c._write_task_scope = MockCancelScope()
         c._read_task_scope = MockCancelScope()
 
+        start_time = trio.current_time()
         await c._ping_loop()
+        end_time = trio.current_time()
 
+        assert end_time - start_time == 0.1
         assert c._write_task_scope.cancel_called
         assert c._read_task_scope.cancel_called
 
-    async def test_ping_loop_disconnect(self, monkeypatch, mock_send_packet):
+    async def test_ping_loop_disconnect(
+        self, monkeypatch, mock_send_packet, autojump_clock
+    ):
         c = trio_client.EngineIoClient()
         c.state = "connected"
         c._ping_interval = 2
@@ -1244,7 +1535,8 @@ class TestTrioClient:
         c._write_task_scope = MockCancelScope()
         c._read_task_scope = MockCancelScope()
 
-        async def fake_trio_sleep(_):
+        # Replace the trio.sleep delay by a side effect to force disconnection.
+        async def fake_trio_sleep(delay):
             c.state = "disconnecting"
 
         monkeypatch.setattr("trio_engineio.trio_client.trio.sleep", fake_trio_sleep)
@@ -1256,7 +1548,7 @@ class TestTrioClient:
         assert c._write_task_scope.cancel_called
         assert c._read_task_scope.cancel_called
 
-    async def test_ping_loop_missing_pong(self, monkeypatch, mock_send_packet):
+    async def test_ping_loop_missing_pong_polling(self, monkeypatch, mock_send_packet):
         c = trio_client.EngineIoClient()
         c.state = "connected"
         c._ping_interval = 2
@@ -1264,6 +1556,7 @@ class TestTrioClient:
         c._write_task_scope = MockCancelScope()
         c._read_task_scope = MockCancelScope()
 
+        # Replace the trio.sleep delay by a side effect to simulate no PONG reception.
         async def fake_trio_sleep(_):
             c._pong_received = False
 
@@ -1271,13 +1564,38 @@ class TestTrioClient:
 
         await c._ping_loop()
 
-        assert c.state == 'connected'
+        assert c.state == "connected"
         assert not c._pong_received
         assert mock_send_packet[0].packet_type == packet.PING
         assert c._write_task_scope.cancel_called
         assert c._read_task_scope.cancel_called
 
-    async def test_ping_loop_missing_pong_websocket(self, monkeypatch, mock_send_packet):
+    async def test_ping_loop_cancelled(self, monkeypatch, mock_send_packet):
+        c = trio_client.EngineIoClient()
+        c.state = "connected"
+        c._ping_interval = 2
+        c._ping_timeout = 1
+        c._write_task_scope = MockCancelScope()
+        c._read_task_scope = MockCancelScope()
+        c._ping_task_scope = MockCancelScope()
+
+        # Replace the trio.sleep delay by a side effect to simulate external cancellation.
+        async def fake_trio_sleep(_):
+            c._ping_task_scope.cancel()
+
+        monkeypatch.setattr("trio_engineio.trio_client.trio.sleep", fake_trio_sleep)
+
+        await c._ping_loop()
+
+        assert c.state == "connected"
+        assert not c._pong_received
+        assert mock_send_packet[0].packet_type == packet.PING
+        assert c._write_task_scope.cancel_called
+        assert c._read_task_scope.cancel_called
+
+    async def test_ping_loop_missing_pong_websocket(
+        self, monkeypatch, mock_send_packet
+    ):
         c = trio_client.EngineIoClient()
         c.state = "connected"
         c._ping_interval = 2
@@ -1286,6 +1604,7 @@ class TestTrioClient:
         c._read_task_scope = MockCancelScope()
         c._ws = MockWebsocketConnection()
 
+        # Replace the trio.sleep delay by a side effect to simulate no PONG reception.
         async def fake_trio_sleep(_):
             c._pong_received = False
 
@@ -1293,54 +1612,57 @@ class TestTrioClient:
 
         await c._ping_loop()
 
-        assert c.state == 'connected'
+        assert c.state == "connected"
         assert not c._pong_received
         assert mock_send_packet[0].packet_type == packet.PING
         assert c._write_task_scope.cancel_called
         assert c._read_task_scope.cancel_called
         assert c._ws.closed
 
-    async def test_read_loop_polling_disconnected(self, mock_trigger_event):
+    #
+    # `_read_loop_polling` tests
+    #
+    async def test_read_loop_polling_disconnected(
+        self, mock_trigger_event, mock_reset, autojump_clock
+    ):
         c = trio_client.EngineIoClient()
-        c.state = 'disconnected'
+        c.state = "disconnected"
         c._ping_interval = 2
         c._ping_timeout = 1
         c._write_task_scope = MockCancelScope()
         c._ping_task_scope = MockCancelScope()
 
-        async def fake_reset():
-            return
-
-        c._reset = fake_reset
-
         await c._read_loop_polling()
 
         assert c._write_task_scope.cancel_called
         assert c._ping_task_scope.cancel_called
-        assert mock_trigger_event == {}
+        assert mock_trigger_event == {}  # _trigger_event is not called
+        assert len(mock_reset) == 1  # _reset is called once
 
-    @pytest.mark.parametrize(("status", "pkt"), ((None, None), (404, None), (200, "INVALID")))
+    @pytest.mark.parametrize(
+        "status, pkt", ((None, None), (404, None), (200, "INVALID"))
+    )
     async def test_read_loop_polling_error(
-            self, status, pkt, mock_send_request, mock_trigger_event
+        self,
+        status,
+        pkt,
+        mock_send_request,
+        mock_trigger_event,
+        mock_reset,
+        autojump_clock,
     ):
         c = trio_client.EngineIoClient()
         c._ping_interval = 25
         c._ping_timeout = 5
-        c.state = 'connected'
+        c.state = "connected"
         trio_client.connected_clients.append(c)
-        c._base_url = b'http://foo'
+        c._base_url = b"http://foo"
         c._write_task_scope = MockCancelScope()
         c._ping_task_scope = MockCancelScope()
 
-        async def fake_reset():
-            c.state = "disconnected"
-            return
-
         state, saved_request = mock_send_request
-        state["mode"] = "poll"
         state["status"] = status
         state["returned_packet"] = pkt
-        c._reset = fake_reset
 
         await c._read_loop_polling()
 
@@ -1348,7 +1670,10 @@ class TestTrioClient:
         assert bytes(saved_request["url"]) == b"http://foo"
         assert saved_request["headers"] is None
         assert saved_request["timeouts"] == {
-            "connect": 30.0, "read": 30.0, "write": 30.0, "pool": 30.0
+            "connect": 30.0,
+            "read": 30.0,
+            "write": 30.0,
+            "pool": 30.0,
         }
         assert c._write_task_scope.cancel_called
         assert c._ping_task_scope.cancel_called
@@ -1356,35 +1681,25 @@ class TestTrioClient:
         assert mock_trigger_event["args"] == ()
         assert not mock_trigger_event["run_async"]
         assert c not in trio_client.connected_clients
-        assert c.state == 'disconnected'
+        assert len(mock_reset) == 1  # _reset is called once
+        # state should be "disconnected" but the mock_reset fixture do not change it.
+        assert c.state == "connected"
 
-    async def test_read_loop_polling(self, mock_send_request):
+    async def test_read_loop_polling(
+        self, mock_send_request, mock_receive_packet, mock_reset, autojump_clock
+    ):
         c = trio_client.EngineIoClient()
         c._ping_interval = 25
         c._ping_timeout = 5
-        c.state = 'connected'
-        c._base_url = b'http://foo'
+        c.state = "connected"
+        c._base_url = b"http://foo"
         c._write_task_scope = MockCancelScope()
         c._ping_task_scope = MockCancelScope()
 
-        received_packets = []
-
-        async def _receive_packet(pkt: packet.Packet):
-            received_packets.append((pkt.packet_type, pkt.data))
-            if len(received_packets) > 1:
-                c.state = "disconnected"
-
-        async def fake_reset():
-            c.state = "disconnected"
-            return
-
         state, saved_request = mock_send_request
-        state["mode"] = "poll"
         state["status"] = 200
         state["returned_packet"] = packet.Packet(packet.PONG)
         state["more_packets"] = True
-        c._reset = fake_reset
-        c._receive_packet = _receive_packet
 
         await c._read_loop_polling()
 
@@ -1392,47 +1707,47 @@ class TestTrioClient:
         assert bytes(saved_request["url"]) == b"http://foo"
         assert saved_request["headers"] is None
         assert saved_request["timeouts"] == {
-            "connect": 30.0, "read": 30.0, "write": 30.0, "pool": 30.0
+            "connect": 30.0,
+            "read": 30.0,
+            "write": 30.0,
+            "pool": 30.0,
         }
-        assert (3, None) in received_packets
-        assert (6, None) in received_packets
+        assert mock_receive_packet[0].packet_type == packet.PONG
+        assert mock_receive_packet[1].packet_type == packet.NOOP
 
-    async def test_read_loop_websocket_disconnected(self, mock_trigger_event):
+    #
+    # `_read_loop_websocket` tests
+    #
+    async def test_read_loop_websocket_disconnected(
+        self, mock_trigger_event, mock_reset, autojump_clock
+    ):
         c = trio_client.EngineIoClient()
-        c.state = 'disconnected'
+        c.state = "disconnected"
         c._ping_interval = 2
         c._ping_timeout = 1
         c._write_task_scope = MockCancelScope()
         c._ping_task_scope = MockCancelScope()
 
-        async def fake_reset():
-            return
-
-        c._reset = fake_reset
-
         await c._read_loop_websocket()
 
         assert c._write_task_scope.cancel_called
         assert c._ping_task_scope.cancel_called
-        assert mock_trigger_event == {}
+        assert mock_trigger_event == {}  # _trigger_event is not called
+        assert len(mock_reset) == 1  # _reset is called once
 
-    async def test_read_loop_websocket_no_response(self, mock_trigger_event):
+    async def test_read_loop_websocket_no_response(
+        self, mock_trigger_event, mock_reset, autojump_clock
+    ):
         c = trio_client.EngineIoClient()
         c._ping_interval = 25
         c._ping_timeout = 5
-        c.state = 'connected'
+        c.state = "connected"
         trio_client.connected_clients.append(c)
-        c._base_url = b'ws://foo'
+        c._base_url = b"ws://foo"
         c._write_task_scope = MockCancelScope()
         c._ping_task_scope = MockCancelScope()
         c._ws = MockWebsocketConnection()
 
-        async def fake_reset():
-            c.state = "disconnected"
-            return
-
-        c._reset = fake_reset
-
         await c._read_loop_websocket()
 
         assert c._write_task_scope.cancel_called
@@ -1441,29 +1756,25 @@ class TestTrioClient:
         assert mock_trigger_event["args"] == ()
         assert not mock_trigger_event["run_async"]
         assert c not in trio_client.connected_clients
-        assert c.state == 'disconnected'
+        assert len(mock_reset) == 1  # _reset is called once
+        # state should be "disconnected" but the mock_reset fixture do not change it.
+        assert c.state == "connected"
 
     @pytest.mark.parametrize("pkt", ("ERROR", b"bfoo", None, "TIMEOUT"))
     async def test_read_loop_websocket_unexpected_error(
-            self, pkt, mock_trigger_event, autojump_clock
+        self, pkt, mock_trigger_event, mock_reset, autojump_clock
     ):
         c = trio_client.EngineIoClient()
         c._ping_interval = 2
         c._ping_timeout = 1
-        c.state = 'connected'
+        c.state = "connected"
         trio_client.connected_clients.append(c)
-        c._base_url = b'ws://foo'
+        c._base_url = b"ws://foo"
         c._write_task_scope = MockCancelScope()
         c._ping_task_scope = MockCancelScope()
         c._ws = MockWebsocketConnection()
         c._ws.received = [pkt]
 
-        async def fake_reset():
-            c.state = "disconnected"
-            return
-
-        c._reset = fake_reset
-
         await c._read_loop_websocket()
 
         assert c._write_task_scope.cancel_called
@@ -1472,48 +1783,41 @@ class TestTrioClient:
         assert mock_trigger_event["args"] == ()
         assert not mock_trigger_event["run_async"]
         assert c not in trio_client.connected_clients
-        assert c.state == 'disconnected'
+        assert len(mock_reset) == 1  # _reset is called once
+        # state should be "disconnected" but the mock_reset fixture do not change it.
+        assert c.state == "connected"
 
-    async def test_read_loop_websocket(self):
+    async def test_read_loop_websocket(
+        self, mock_receive_packet, mock_reset, autojump_clock
+    ):
         c = trio_client.EngineIoClient()
         c._ping_interval = 25
         c._ping_timeout = 5
-        c.state = 'connected'
+        c.state = "connected"
         trio_client.connected_clients.append(c)
-        c._base_url = b'ws://foo'
+        c._base_url = b"ws://foo"
         c._write_task_scope = MockCancelScope()
         c._ping_task_scope = MockCancelScope()
         c._ws = MockWebsocketConnection()
-        c._ws.received = ["4[message]", packet.Packet(packet.CLOSE).encode()]
-
-        received_packets = []
-
-        async def _receive_packet(pkt: packet.Packet):
-            received_packets.append((pkt.packet_type, pkt.data))
-            if len(received_packets) > 1:
-                c.state = "disconnected"
-
-        async def fake_reset():
-            c.state = "disconnected"
-            return
-
-        c._receive_packet = _receive_packet
-        c._reset = fake_reset
+        c._ws.received = ["42[message]", packet.Packet(packet.CLOSE).encode()]
 
         await c._read_loop_websocket()
 
-        assert  received_packets[0] == (4, "[message]")
-        assert  received_packets[1] == (1, None)
+        assert mock_receive_packet[0].packet_type == packet.MESSAGE
+        assert mock_receive_packet[0].data == "2[message]"
+        assert mock_receive_packet[1].packet_type == packet.CLOSE
         assert c._write_task_scope.cancel_called
         assert c._ping_task_scope.cancel_called
-        assert c.state == 'disconnected'
 
+    #
+    # `_write_loop` tests
+    #
     async def test_write_loop_disconnected(self):
         c = trio_client.EngineIoClient()
         c._ping_interval = 25
         c._ping_timeout = 5
         c._current_transport = "polling"
-        c.state = 'disconnected'
+        c.state = "disconnected"
 
         await c._write_loop()
         # should not block
@@ -1523,7 +1827,8 @@ class TestTrioClient:
         c._ping_interval = 25
         c._ping_timeout = 5
         c._current_transport = "polling"
-        c.state = 'connected'
+        c.state = "connected"
+
         c._send_channel, c._receive_channel = trio.open_memory_channel(1)
         await c._send_channel.send(None)
 
@@ -1535,8 +1840,9 @@ class TestTrioClient:
         c._ping_interval = 2
         c._ping_timeout = 1
         c._current_transport = "polling"
-        c.state = 'connected'
-        c._send_channel, c._receive_channel = trio.open_memory_channel(1)
+        c.state = "connected"
+
+        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
 
         await c._write_loop()
         # should not block
@@ -1546,55 +1852,63 @@ class TestTrioClient:
         c._ping_interval = 2
         c._ping_timeout = 1
         c._current_transport = "polling"
-        c.state = 'connected'
-        c._send_channel, c._receive_channel = trio.open_memory_channel(1)
+        c.state = "connected"
+
+        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
         await c._send_channel.send(packet.Packet(packet.PONG))
         c._receive_channel.close()
 
         await c._write_loop()
         # should not block
 
-    async def test_write_loop_polling_one_packet(self, mock_send_request, autojump_clock):
+    async def test_write_loop_polling_one_packet(
+        self, mock_send_request, autojump_clock
+    ):
         c = trio_client.EngineIoClient()
         c = trio_client.EngineIoClient()
         c._ping_interval = 2
         c._ping_timeout = 1
         c._current_transport = "polling"
-        c.state = 'connected'
-        c._base_url = b'http://foo'
-        c._send_channel, c._receive_channel = trio.open_memory_channel(1)
+        c.state = "connected"
+        c._base_url = b"http://foo"
 
         state, saved_request = mock_send_request
-        state["mode"] = "post"
         state["status"] = 200
 
-        pkt = packet.Packet(packet.MESSAGE, {'foo': 'bar'})
+        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
+        pkt = packet.Packet(packet.MESSAGE, {"foo": "bar"})
         await c._send_channel.send(pkt)
 
         await c._write_loop()
 
         assert saved_request["method"] == "POST"
         assert bytes(saved_request["url"]) == b"http://foo"
-        assert saved_request["headers"] == {'Content-Type': 'application/octet-stream'}
+        assert saved_request["headers"] == {"Content-Type": "application/octet-stream"}
         p = payload.Payload([pkt])
         assert saved_request["body"] == p.encode()
-        assert saved_request["timeouts"] == {"connect": 5.0, "read": 5.0, "write": 5.0, "pool": 5.0}
+        assert saved_request["timeouts"] == {
+            "connect": 5.0,
+            "read": 5.0,
+            "write": 5.0,
+            "pool": 5.0,
+        }
 
-    async def test_write_loop_polling_three_packets(self, mock_send_request, autojump_clock):
+    async def test_write_loop_polling_three_packets(
+        self, mock_send_request, autojump_clock
+    ):
         c = trio_client.EngineIoClient()
         c._ping_interval = 2
         c._ping_timeout = 1
         c._current_transport = "polling"
-        c.state = 'connected'
-        c._base_url = b'http://foo'
-        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
+        c.state = "connected"
+        c._base_url = b"http://foo"
 
         state, saved_request = mock_send_request
-        state["mode"] = "post"
         state["status"] = 200
 
+        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
         pkts = [
-            packet.Packet(packet.MESSAGE, {'foo': 'bar'}),
+            packet.Packet(packet.MESSAGE, {"foo": "bar"}),
             packet.Packet(packet.PING),
             packet.Packet(packet.NOOP),
         ]
@@ -1605,57 +1919,60 @@ class TestTrioClient:
 
         assert saved_request["method"] == "POST"
         assert bytes(saved_request["url"]) == b"http://foo"
-        assert saved_request["headers"] == {'Content-Type': 'application/octet-stream'}
+        assert saved_request["headers"] == {"Content-Type": "application/octet-stream"}
         p = payload.Payload(pkts)
         assert saved_request["body"] == p.encode()
-        assert saved_request["timeouts"] == {"connect": 5.0, "read": 5.0, "write": 5.0, "pool": 5.0}
+        assert saved_request["timeouts"] == {
+            "connect": 5.0,
+            "read": 5.0,
+            "write": 5.0,
+            "pool": 5.0,
+        }
 
     @pytest.mark.parametrize("status", (None, 500))
     async def test_write_loop_polling_connection_error(
-            self, status, mock_send_request, autojump_clock
+        self, status, mock_send_request, autojump_clock
     ):
         c = trio_client.EngineIoClient()
         c._ping_interval = 2
         c._ping_timeout = 1
         c._current_transport = "polling"
-        c.state = 'connected'
-        c._base_url = b'http://foo'
-        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
+        c.state = "connected"
+        c._base_url = b"http://foo"
 
         state, saved_request = mock_send_request
-        state["mode"] = "post"
         state["status"] = status
 
-        pkts = [
-            packet.Packet(packet.MESSAGE, {'foo': 'bar'}),
-        ]
-        for pkt in pkts:
-            await c._send_channel.send(pkt)
+        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
+        pkt = packet.Packet(packet.MESSAGE, {"foo": "bar"})
+        await c._send_channel.send(pkt)
 
         await c._write_loop()
 
         assert saved_request["method"] == "POST"
         assert bytes(saved_request["url"]) == b"http://foo"
-        assert saved_request["headers"] == {'Content-Type': 'application/octet-stream'}
-        p = payload.Payload(pkts)
+        assert saved_request["headers"] == {"Content-Type": "application/octet-stream"}
+        p = payload.Payload([pkt])
         assert saved_request["body"] == p.encode()
-        assert saved_request["timeouts"] == {"connect": 5.0, "read": 5.0, "write": 5.0, "pool": 5.0}
-        assert c.state == 'connected'
+        assert saved_request["timeouts"] == {
+            "connect": 5.0,
+            "read": 5.0,
+            "write": 5.0,
+            "pool": 5.0,
+        }
+        assert c.state == "connected"
 
     async def test_write_loop_websocket_one_packet(self, autojump_clock):
         c = trio_client.EngineIoClient()
         c._ping_interval = 2
         c._ping_timeout = 1
         c._current_transport = "websocket"
-        c.state = 'connected'
-        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
+        c.state = "connected"
         c._ws = MockWebsocketConnection()
 
-        pkts = [
-            packet.Packet(packet.MESSAGE, {'foo': 'bar'}),
-        ]
-        for pkt in pkts:
-            await c._send_channel.send(pkt)
+        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
+        pkt = packet.Packet(packet.MESSAGE, {"foo": "bar"})
+        await c._send_channel.send(pkt)
 
         await c._write_loop()
 
@@ -1666,12 +1983,12 @@ class TestTrioClient:
         c._ping_interval = 2
         c._ping_timeout = 1
         c._current_transport = "websocket"
-        c.state = 'connected'
-        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
+        c.state = "connected"
         c._ws = MockWebsocketConnection()
 
+        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
         pkts = [
-            packet.Packet(packet.MESSAGE, {'foo': 'bar'}),
+            packet.Packet(packet.MESSAGE, {"foo": "bar"}),
             packet.Packet(packet.PING),
             packet.Packet(packet.NOOP),
         ]
@@ -1681,44 +1998,38 @@ class TestTrioClient:
         await c._write_loop()
 
         assert c._ws.sent[0] == '4{"foo":"bar"}'
-        assert c._ws.sent[1] == '2'
-        assert c._ws.sent[2] == '6'
+        assert c._ws.sent[1] == "2"
+        assert c._ws.sent[2] == "6"
 
     async def test_write_loop_websocket_one_packet_binary(self, autojump_clock):
         c = trio_client.EngineIoClient()
         c._ping_interval = 2
         c._ping_timeout = 1
         c._current_transport = "websocket"
-        c.state = 'connected'
+        c.state = "connected"
         c._send_channel, c._receive_channel = trio.open_memory_channel(10)
         c._ws = MockWebsocketConnection()
 
-        pkts = [
-            packet.Packet(packet.MESSAGE, b"foo"),
-        ]
-        for pkt in pkts:
-            await c._send_channel.send(pkt)
+        pkt = packet.Packet(packet.MESSAGE, b"foo")
+        await c._send_channel.send(pkt)
 
         await c._write_loop()
 
-        assert c._ws.sent[0] == b'\x04foo'
+        assert c._ws.sent[0] == b"\x04foo"
 
     async def test_write_loop_websocket_bad_connection(self, autojump_clock):
         c = trio_client.EngineIoClient()
         c._ping_interval = 2
         c._ping_timeout = 1
         c._current_transport = "websocket"
-        c.state = 'connected'
-        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
+        c.state = "connected"
         c._ws = MockWebsocketConnection()
         c._ws.closed = True
 
-        pkts = [
-            packet.Packet(packet.MESSAGE, {'foo': 'bar'}),
-        ]
-        for pkt in pkts:
-            await c._send_channel.send(pkt)
+        c._send_channel, c._receive_channel = trio.open_memory_channel(10)
+        pkt = packet.Packet(packet.MESSAGE, {"foo": "bar"})
+        await c._send_channel.send(pkt)
 
         await c._write_loop()
 
-        assert c.state == 'connected'
+        assert c.state == "connected"

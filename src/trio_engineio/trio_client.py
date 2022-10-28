@@ -121,7 +121,7 @@ class EngineIoClient:
 
         self._handlers: dict[EventName, Callable[[Any], Any]] = {}
         self._base_url: NoCachingURL | None = None
-        self._transports: Sequence[Transport] | None = None
+        self._transports: Sequence[Transport] = ["polling", "websocket"]
         self._current_transport: Transport | None = None
         self._sid: str | None = None
         self._upgrades: Sequence[Transport] | None = None
@@ -371,7 +371,7 @@ class EngineIoClient:
                 )
             else:
                 self._logger.info("Reset: Closing websocket")
-                with trio.fail_after(self._timeouts["connect"]):
+                with trio.move_on_after(self._timeouts["connect"]):
                     await self._ws.aclose()
                 self._logger.info(f"Reset: Websocket closed: {self._ws.closed}")
 
