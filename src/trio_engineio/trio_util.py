@@ -121,7 +121,7 @@ class ResultCapture:
         However, this property can be useful in some situations e.g. filtering a list of TaskResult
         objects.
         """
-        if not self._done_event.set():
+        if not self._done_event.is_set():
             raise TaskNotDoneException(self)
         return self._exception
 
