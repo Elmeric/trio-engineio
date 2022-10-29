@@ -102,11 +102,10 @@ class NoCachingURL(httpcore.URL):
 
     @target.setter
     def target(self, value: bytes) -> None:
-        self._target = value
+        self._target = enforce_bytes(value, name="target")
 
     def add_to_target(self, value: str | bytes):
-        value = enforce_bytes(value, name="target")
-        self._target += value
+        self._target += enforce_bytes(value, name="target")
 
 
 def get_engineio_url(
@@ -178,7 +177,7 @@ class JsonProtocol(Protocol):
         sort_keys: bool = False,
         **kw: Any,
     ) -> str:
-        ...
+        ...     # pragma: no cover
 
     def loads(
         self,
@@ -192,4 +191,4 @@ class JsonProtocol(Protocol):
         object_pairs_hook: Callable[[list[tuple[Any, Any]]], Any] | None = None,
         **kw: Any,
     ) -> Any:
-        ...
+        ... # pragma: no cover
