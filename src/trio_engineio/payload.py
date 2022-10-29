@@ -62,12 +62,12 @@ class Payload(object):
                     raise ValueError("Too many packets in payload")
                 packet_len = 0
                 i += 1
-                while encoded_payload[i : i + 1][0] != 255:
-                    packet_len = packet_len * 10 + encoded_payload[i : i + 1][0]
+                while encoded_payload[i : i + 1][0] != 255:     # noqa
+                    packet_len = packet_len * 10 + encoded_payload[i : i + 1][0]    # noqa
                     i += 1
                 self.packets.append(
                     packet.Packet(
-                        encoded_packet=encoded_payload[i + 1 : i + 1 + packet_len]
+                        encoded_packet=encoded_payload[i + 1 : i + 1 + packet_len]  # noqa
                     )
                 )
                 i += packet_len + 1
@@ -79,6 +79,6 @@ class Payload(object):
                     raise ValueError("Too many packets in payload")
                 j = encoded_payload.find(":", i)
                 packet_len = int(encoded_payload[i:j])
-                pkt = encoded_payload[j + 1 : j + 1 + packet_len]
+                pkt = encoded_payload[j + 1 : j + 1 + packet_len]   # noqa
                 self.packets.append(packet.Packet(encoded_packet=pkt))
                 i = j + 1 + packet_len

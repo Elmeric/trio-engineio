@@ -191,4 +191,4 @@ class JsonProtocol(Protocol):
         object_pairs_hook: Callable[[list[tuple[Any, Any]]], Any] | None = None,
         **kw: Any,
     ) -> Any:
-        ... # pragma: no cover
+        ...     # pragma: no cover

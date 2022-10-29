@@ -341,7 +341,7 @@ class MockWebsocketConnection:
                     and self.close_after_pong
                 ):
                     self.closed = True
-            except Exception as e:
+            except Exception:
                 pass
             return msg
 
@@ -1863,7 +1863,6 @@ async def test_write_loop_closed_channel():
 
 
 async def test_write_loop_polling_one_packet(mock_send_request, autojump_clock):
-    c = trio_client.EngineIoClient()
     c = trio_client.EngineIoClient()
     c._ping_interval = 2
     c._ping_timeout = 1
