@@ -1,38 +1,21 @@
 [tool.poetry]
 name = "trio-engineio"
-version = "0.1.2"
-description = ""
+version = "0.1.3"
+description = "An asynchronous Engine.IO client using the trio framework"
 authors = ["Eric Lemoine <erik.lemoine@gmail.com>"]
-license = "Apache-2.0"
+license = "BSD-3-Clause"
 readme = "README.md"
 homepage = "https://github.com/Elmeric/trio-engineio"
 repository = "https://github.com/Elmeric/trio-engineio"
 packages = [{include = "trio_engineio", from = "src"}]
 
-name = "apologies"
-version = "0.1.39"
-description = "Python code to play a game similar to Sorry"
-authors = ["Kenneth J. Pronovici <pronovic@ieee.org>"]
-license = "Apache-2.0"
-readme = "PyPI.md"
-homepage = "https://pypi.org/project/apologies/"
-repository = "https://github.com/pronovic/apologies"
-include = [
-   { path = 'Changelog', format = 'sdist' },
-   { path = 'LICENSE', format = 'sdist' },
-   { path = 'README.md', format = 'sdist' },
-   { path = 'docs', format = 'sdist' },
-   { path = 'tests', format = 'sdist' },
-]
-packages = [ { include = "apologies", from = "src" } ]
 classifiers=[
    "Programming Language :: Python :: 3",
-   "License :: OSI Approved :: Apache Software License",
+   "License :: OSI Approved :: BSD-3-Clause License",
    "Operating System :: OS Independent",
-   "Environment :: Console",
+   "Environment :: Web Environment",
    "Intended Audience :: Developers",
    "Natural Language :: English",
-   "Topic :: Games/Entertainment :: Board Games",
    "Topic :: Software Development :: Libraries",
 ]
 

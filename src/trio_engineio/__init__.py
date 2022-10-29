@@ -6,6 +6,6 @@
 
 from .trio_client import EngineIoClient, EngineIoConnectionError
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 __all__ = ["__version__", "EngineIoClient", "EngineIoConnectionError"]
