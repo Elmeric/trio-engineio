@@ -97,8 +97,8 @@ class ResultCapture:
         self._has_run_been_called = True
         try:
             self._result = await self._routine(*self._args)
-        except BaseException as e:
-            self._exception = e
+        except BaseException as exc:
+            self._exception = exc
             raise  # Note the exception is allowed to propagate into user nursery
         finally:
             self._done_event.set()

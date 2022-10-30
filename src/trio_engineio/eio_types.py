@@ -43,8 +43,10 @@ def enforce_bytes(value: bytes | str, *, name: str) -> bytes:
     if isinstance(value, str):
         try:
             return value.encode("ascii")
-        except UnicodeEncodeError:
-            raise TypeError(f"{name} strings may not include unicode characters.")
+        except UnicodeEncodeError as exc:
+            raise TypeError(
+                f"{name} strings may not include unicode characters."
+            ) from exc
     elif isinstance(value, bytes):
         return value
 
@@ -58,7 +60,7 @@ def enforce_url(value: httpcore.URL | bytes | str, *, name: str) -> httpcore.URL
     """
     if isinstance(value, (bytes, str)):
         return httpcore.URL(value)
-    elif isinstance(value, httpcore.URL):
+    if isinstance(value, httpcore.URL):
         return value
 
     seen_type = type(value).__name__
@@ -74,7 +76,7 @@ def enforce_headers(
     """
     if value is None:
         return []
-    elif isinstance(value, Mapping):
+    if isinstance(value, Mapping):
         return [
             (
                 enforce_bytes(k, name="header name"),
@@ -82,7 +84,7 @@ def enforce_headers(
             )
             for k, v in value.items()
         ]
-    elif isinstance(value, Sequence):
+    if isinstance(value, Sequence):
         return [
             (
                 enforce_bytes(k, name="header name"),
@@ -115,7 +117,7 @@ class NoCachingURL(httpcore.URL):
 
 
 def get_engineio_url(
-     url: httpcore.URL, engineio_path: bytes, transport: Transport
+    url: httpcore.URL, engineio_path: bytes, transport: Transport
 ) -> NoCachingURL:
     """Generate the Engine.IO connection URL.
 
@@ -183,11 +185,11 @@ class JsonProtocol(Protocol):
         sort_keys: bool = False,
         **kw: Any,
     ) -> str:
-        ...     # pragma: no cover
+        ...  # pragma: no cover
 
     def loads(
         self,
-        s: str | bytes,
+        text: str | bytes,
         *,
         cls: Type[json.JSONDecoder] | None = None,
         object_hook: Callable[[dict], Any] | None = None,
@@ -197,4 +199,4 @@ class JsonProtocol(Protocol):
         object_pairs_hook: Callable[[list[tuple[Any, Any]]], Any] | None = None,
         **kw: Any,
     ) -> Any:
-        ...     # pragma: no cover
+        ...  # pragma: no cover

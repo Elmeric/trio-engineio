@@ -23,7 +23,7 @@ packet_names = {
 binary_types = (bytes, bytearray)
 
 
-class Packet(object):
+class Packet:
     """Engine.IO packet."""
 
     json: JsonProtocol = _json
@@ -57,7 +57,7 @@ class Packet(object):
                 encoded_packet += self.data
         elif isinstance(self.data, str):
             encoded_packet += self.data
-        elif isinstance(self.data, dict) or isinstance(self.data, list):
+        elif isinstance(self.data, (dict, list)):
             encoded_packet += self.json.dumps(self.data, separators=(",", ":"))
         elif self.data is not None:
             encoded_packet += str(self.data)

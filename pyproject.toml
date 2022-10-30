@@ -33,6 +33,7 @@ pytest-cov = "^4.0.0"
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
 isort = "^5.10.1"
+pylint = { version = "^2.15.5", python = ">=3.7.2,<4.0" }
 
 [build-system]
 requires = ["poetry-core"]
@@ -43,6 +44,13 @@ target-version = ['py37']
 
 [tool.isort]
 profile = "black"
+
+[tool.pylint.'MESSAGES CONTROL']
+disable = [
+    "missing-class-docstring",
+    "missing-module-docstring",
+    "missing-function-docstring"
+]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
