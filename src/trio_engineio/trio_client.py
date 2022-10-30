@@ -164,7 +164,7 @@ class EngineIoClient:
                     self._logger.setLevel(logging.ERROR)
                 self._logger.addHandler(logging.StreamHandler())
 
-    def on(     # pylint: disable=invalid-name
+    def on(  # pylint: disable=invalid-name
         self, event: EventName, handler: Callable[[Any], Any] | None = None
     ) -> Callable[[Any], Any]:
         """Register an event handler.
@@ -463,7 +463,8 @@ class EngineIoClient:
                 # upgrade to websocket succeeded, we're done here
                 return True
 
-        # No websocket upgrade attempt or upgrade failed: start polling background tasks.
+        # No websocket upgrade attempt or upgrade failed:
+        # start polling background tasks.
         self._ping_task_scope = await nursery.start(self._ping_loop)
         self._write_task_scope = await nursery.start(self._write_loop)
         self._read_task_scope = await nursery.start(self._read_loop_polling)
@@ -864,7 +865,7 @@ class EngineIoClient:
         self._ping_task_scope.cancel()
 
         if self.state == "connected":
-            # Disconnection is not due to the user calling `EngineIoClient.disconnect()`:
+            # Disconnection is not due to the user calling `EngineIoClient.disconnect():
             # trigger the "disconnect" event, remove the client from the
             # connected_clients list and reset the connection.
             await self._trigger_event("disconnect", run_async=False)
@@ -902,7 +903,8 @@ class EngineIoClient:
                         pkt = await self._ws.get_message()
                         if pkt is None:
                             self._logger.warning(
-                                "Websocket read loop: WebSocket read returned None, aborting"
+                                "Websocket read loop: WebSocket read returned None, "
+                                "aborting"
                             )
                             break
                 except trio_ws.ConnectionClosed:
@@ -930,7 +932,8 @@ class EngineIoClient:
                     pkt = packet.Packet(encoded_packet=pkt)
                 except Exception as exc:  # pragma: no cover    # pylint: disable=broad-except
                     self._logger.info(
-                        "Websocket read loop: Unexpected error decoding packet: %s, aborting",
+                        "Websocket read loop: Unexpected error decoding packet: %s, "
+                        "aborting",
                         exc,
                     )
                     break
@@ -951,7 +954,7 @@ class EngineIoClient:
         self._ping_task_scope.cancel()
 
         if self.state == "connected":
-            # Disconnection is not due to the user calling `EngineIoClient.disconnect()`:
+            # Disconnection is not due to the user calling `EngineIoClient.disconnect():
             # trigger the "disconnect" event, remove the client from the
             # connected_clients list and reset the connection.
             await self._trigger_event("disconnect", run_async=False)

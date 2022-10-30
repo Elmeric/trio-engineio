@@ -40,10 +40,13 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.black]
-target-version = ['py37']
+target-version = ["py37", "py38", "py39", "py310", "py311"]
 
 [tool.isort]
 profile = "black"
+
+[tool.pylint.format]
+max-line-length = "88"
 
 [tool.pylint.'MESSAGES CONTROL']
 disable = [
