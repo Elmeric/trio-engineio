@@ -6,8 +6,7 @@
 
 import pytest
 
-from trio_engineio import packet
-from trio_engineio import payload
+from trio_engineio import packet, payload
 
 
 def test_encode_empty_payload():

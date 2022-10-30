@@ -4,14 +4,14 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import pytest
 import httpcore
+import pytest
 
 from trio_engineio.eio_types import (
-    enforce_bytes,
-    enforce_url,
-    enforce_headers,
     NoCachingURL,
+    enforce_bytes,
+    enforce_headers,
+    enforce_url,
     get_engineio_url,
 )
 

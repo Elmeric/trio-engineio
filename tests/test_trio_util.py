@@ -9,8 +9,8 @@ import trio
 
 from trio_engineio.trio_util import (
     ResultCapture,
-    TaskWrappedException,
     TaskNotDoneException,
+    TaskWrappedException,
 )
 
 

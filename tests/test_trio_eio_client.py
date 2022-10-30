@@ -11,13 +11,17 @@ import logging
 import ssl
 from typing import AsyncIterator
 
+import httpcore
 import pytest
 import trio
-import httpcore
 
-from trio_engineio import trio_client, EngineIoConnectionError
-from trio_engineio import packet, payload
-from trio_engineio import eio_types
+from trio_engineio import (
+    EngineIoConnectionError,
+    eio_types,
+    packet,
+    payload,
+    trio_client,
+)
 
 # https://github.com/miguelgrinberg/python-socketio/issues/332
 

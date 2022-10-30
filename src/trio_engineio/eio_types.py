@@ -6,18 +6,18 @@
 
 from __future__ import annotations
 
-import time
 import json
+import time
 from typing import (
-    Protocol,
     Any,
-    Union,
-    Type,
     Callable,
     Literal,
-    Sequence,
     Mapping,
     Optional,
+    Protocol,
+    Sequence,
+    Type,
+    Union,
 )
 
 import httpcore

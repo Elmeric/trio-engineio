@@ -9,32 +9,31 @@ from __future__ import annotations
 import inspect
 import logging
 import typing
-from typing import Optional, Callable, Any, Sequence, AsyncIterator
+from typing import Any, AsyncIterator, Callable, Optional, Sequence
 
-import trio
 import httpcore
-from httpcore.backends import trio as trio_backend
+import trio
 import trio_websocket as trio_ws
+from httpcore.backends import trio as trio_backend
 
+from . import packet, payload
+from ._ssl import default_ssl_context
 from .eio_types import (
     EventName,
-    JsonProtocol,
-    Transport,
-    HeadersAsSequence,
-    HeadersAsMapping,
     Headers,
-    Timeouts,
-    enforce_bytes,
-    enforce_url,
-    enforce_headers,
+    HeadersAsMapping,
+    HeadersAsSequence,
+    JsonProtocol,
     NoCachingURL,
+    Timeouts,
+    Transport,
+    enforce_bytes,
+    enforce_headers,
+    enforce_url,
     get_engineio_url,
 )
-from .trio_util import ResultCapture, TaskWrappedException
 from .exceptions import EngineIoConnectionError
-from ._ssl import default_ssl_context
-from . import packet
-from . import payload
+from .trio_util import ResultCapture, TaskWrappedException
 
 default_logger = logging.getLogger("engineio.client")
 connected_clients = []
