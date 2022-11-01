@@ -8,12 +8,22 @@ from __future__ import annotations
 
 import inspect
 import logging
+import ssl
 import typing
-from typing import Any, AsyncIterator, Callable, Optional, Sequence
+from typing import (
+    Any,
+    AsyncIterator,
+    Callable,
+    ClassVar,
+    Optional,
+    Sequence,
+    Union,
+    cast,
+)
 
 import httpcore
 import trio
-import trio_websocket as trio_ws
+import trio_websocket as trio_ws  # type: ignore
 from httpcore.backends import trio as trio_backend
 
 from . import packet, payload
@@ -36,7 +46,7 @@ from .exceptions import EngineIoConnectionError
 from .trio_util import ResultCapture, TaskWrappedException
 
 default_logger = logging.getLogger("engineio.client")
-connected_clients = []
+connected_clients: list["EngineIoClient"] = []
 
 
 # def signal_handler(sig, frame):
@@ -106,9 +116,18 @@ class EngineIoClient:
             - "disconnecting", transient state during connection closing.
     """
 
-    event_names: tuple[EventName, ...] = typing.get_args(EventName)
+    event_names: ClassVar[tuple[EventName, ...]] = typing.get_args(EventName)
     """A tuple of authorized keys to identify an event handlers (Class attribute).
     """
+    _base_url: NoCachingURL
+    _upgrades: list[Transport]
+    _ping_interval: float
+    _ping_timeout: float
+    _send_channel: trio.MemorySendChannel
+    _receive_channel: trio.MemoryReceiveChannel
+    _ping_task_scope: trio.CancelScope
+    _write_task_scope: trio.CancelScope
+    _read_task_scope: trio.CancelScope
 
     def __init__(
         self,
@@ -126,22 +145,13 @@ class EngineIoClient:
         self.state: str = "disconnected"
 
         self._handlers: dict[EventName, Callable[[Any], Any]] = {}
-        self._base_url: NoCachingURL | None = None
-        self._transports: Sequence[Transport] = ["polling", "websocket"]
+        self._transports: list[Transport] = ["polling", "websocket"]
         self._current_transport: Transport | None = None
         self._sid: str | None = None
-        self._upgrades: Sequence[Transport] | None = None
-        self._ping_interval: float | None = None
-        self._ping_timeout: float | None = None
         self._pong_received: bool = True
         self._http: httpcore.AsyncConnectionPool | None = http_session
         self._ws: trio_ws.WebSocketConnection | None = None
-        self._send_channel: trio.MemorySendChannel | None = None
-        self._receive_channel: trio.MemoryReceiveChannel | None = None
         self._ssl_verify: bool = ssl_verify
-        self._ping_task_scope: trio.CancelScope | None = None
-        self._write_task_scope: trio.CancelScope | None = None
-        self._read_task_scope: trio.CancelScope | None = None
         self._timeouts: Timeouts = {
             "connect": request_timeout,
             "read": request_timeout,
@@ -164,7 +174,7 @@ class EngineIoClient:
                     self._logger.setLevel(logging.ERROR)
                 self._logger.addHandler(logging.StreamHandler())
 
-    def on(  # pylint: disable=invalid-name
+    def on(
         self, event: EventName, handler: Callable[[Any], Any] | None = None
     ) -> Callable[[Any], Any]:
         """Register an event handler.
@@ -193,20 +203,20 @@ class EngineIoClient:
         if event not in EngineIoClient.event_names:
             raise ValueError("Invalid event")
 
-        def set_handler(h):
-            self._handlers[event] = h
-            return h
+        def set_handler(hdlr: Callable[[Any], Any]) -> Callable[[Any], Any]:
+            self._handlers[event] = hdlr
+            return hdlr
 
         if handler is None:
             return set_handler
-        set_handler(handler)
+        return set_handler(handler)
 
     async def connect(
         self,
         nursery: trio.Nursery,
         url: httpcore.URL | bytes | str,
         headers: HeadersAsMapping | HeadersAsSequence | None = None,
-        transports: Sequence[Transport] | None = None,
+        transports: Transport | Sequence[Transport] | None = None,
         engineio_path: str | bytes = b"/engine.io",
     ) -> bool:
         """Connect to an Engine.IO server.
@@ -253,7 +263,7 @@ class EngineIoClient:
                 "Client is already connected or disconnecting"
             )
 
-        valid_transports = ["polling", "websocket"]
+        valid_transports: list[Transport] = ["polling", "websocket"]
         if transports is not None:
             if isinstance(transports, str):
                 transports = [transports]
@@ -334,7 +344,7 @@ class EngineIoClient:
         self._sid = None
         self._current_transport = None
 
-    def transport(self) -> Transport:
+    def transport(self) -> Transport | None:
         """Return the name of the transport currently in use.
 
         Returns:
@@ -408,7 +418,7 @@ class EngineIoClient:
         Returns:
             `True` if the connection succeeds.
         """
-        self._base_url: NoCachingURL = get_engineio_url(url, engineio_path, "polling")
+        self._base_url = get_engineio_url(url, engineio_path, "polling")
         self._logger.info(
             "Connect: Attempting polling connection to %s", self._base_url
         )
@@ -442,7 +452,7 @@ class EngineIoClient:
         self._logger.info(
             "Connect: Polling connection accepted with %s", open_packet.data
         )
-        self._sid = open_packet.data["sid"]
+        self._sid = cast(str, open_packet.data["sid"])
         self._upgrades = open_packet.data["upgrades"]
         self._ping_interval = int(open_packet.data["pingInterval"]) / 1000.0
         self._ping_timeout = int(open_packet.data["pingTimeout"]) / 1000.0
@@ -507,6 +517,7 @@ class EngineIoClient:
                 "Connect: Attempting WebSocket connection to %s", websocket_url
             )
 
+        ssl_context: ssl.SSLContext | bool
         if websocket_url.scheme == b"wss":
             ssl_context = default_ssl_context(verify=self._ssl_verify)
         else:
@@ -688,7 +699,7 @@ class EngineIoClient:
             return await self._http.request(
                 method=method,
                 url=url,
-                headers=headers,
+                headers=cast(Union[dict, list, None], headers),
                 content=body,
                 extensions=extensions,
             )

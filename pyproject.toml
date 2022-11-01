@@ -34,6 +34,8 @@ pytest-cov = "^4.0.0"
 black = "^22.8.0"
 isort = "^5.10.1"
 pylint = { version = "^2.15.5", python = ">=3.7.2,<4.0" }
+mypy = "^0.982"
+trio-typing = "^0.7.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -44,16 +46,6 @@ target-version = ["py37", "py38", "py39", "py310", "py311"]
 
 [tool.isort]
 profile = "black"
-
-[tool.pylint.format]
-max-line-length = "88"
-
-[tool.pylint.'MESSAGES CONTROL']
-disable = [
-    "missing-class-docstring",
-    "missing-module-docstring",
-    "missing-function-docstring"
-]
 
 [tool.pytest.ini_options]
 minversion = "6.0"

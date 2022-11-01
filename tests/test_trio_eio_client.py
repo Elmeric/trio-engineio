@@ -369,19 +369,10 @@ def test_create():
 
     assert c._handlers == {}
     for attr in [
-        "_base_url",
         "_current_transport",
         "_sid",
-        "_upgrades",
-        "_ping_interval",
-        "_ping_timeout",
         "_http",
         "_ws",
-        "_send_channel",
-        "_receive_channel",
-        "_ping_task_scope",
-        "_write_task_scope",
-        "_read_task_scope",
     ]:
         assert getattr(c, attr) is None, attr + " is not None"
     assert c._pong_received
@@ -463,10 +454,11 @@ def test_on_event():
     def foo():
         pass
 
-    c.on("disconnect", foo)
+    r = c.on("disconnect", foo)
 
     assert c._handlers["connect"] == foo
     assert c._handlers["disconnect"] == foo
+    assert r == foo
 
 
 def test_on_event_invalid():

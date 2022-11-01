@@ -8,17 +8,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import (
-    Any,
-    Callable,
-    Literal,
-    Mapping,
-    Optional,
-    Protocol,
-    Sequence,
-    Type,
-    Union,
-)
+from typing import Any, Callable, Literal, Mapping, Protocol, Sequence, Type, Union
 
 import httpcore
 
@@ -28,7 +18,7 @@ Headers = list[tuple[bytes, bytes]]
 HeadersAsSequence = Sequence[tuple[Union[bytes, str], Union[bytes, str]]]
 HeadersAsMapping = Mapping[Union[bytes, str], Union[bytes, str]]
 TimeoutKey = Literal["connect", "read", "write", "pool"]
-Timeouts = dict[TimeoutKey, Optional[float]]
+Timeouts = dict[TimeoutKey, float]
 
 
 def enforce_bytes(value: bytes | str, *, name: str) -> bytes:
@@ -104,7 +94,7 @@ class NoCachingURL(httpcore.URL):
         super().__init__(*args, **kwargs)
         self._target = self.target.split(b"&t=")[0]
 
-    @property
+    @property   # type: ignore  # Waiting for https://github.com/python/mypy/pull/13475
     def target(self) -> bytes:
         return self._target + b"&t=" + enforce_bytes(str(time.time()), name="time")
 
