@@ -23,6 +23,7 @@ from typing import (
 
 import httpcore
 import trio
+import trio_typing
 import trio_websocket as trio_ws  # type: ignore
 from httpcore.backends import trio as trio_backend
 
@@ -123,8 +124,8 @@ class EngineIoClient:
     _upgrades: list[Transport]
     _ping_interval: float
     _ping_timeout: float
-    _send_channel: trio.MemorySendChannel
-    _receive_channel: trio.MemoryReceiveChannel
+    _send_channel: trio.MemorySendChannel[packet.Packet]
+    _receive_channel: trio.MemoryReceiveChannel[packet.Packet]
     _ping_task_scope: trio.CancelScope
     _write_task_scope: trio.CancelScope
     _read_task_scope: trio.CancelScope
@@ -299,7 +300,9 @@ class EngineIoClient:
     #     if self.read_loop_task:
     #         await self.read_loop_task
 
-    async def send(self, data: str | bytes | list | dict, binary: bool = None) -> None:
+    async def send(
+        self, data: str | bytes | list[Any] | dict[Any, Any], binary: bool | None = None
+    ) -> None:
         """Send a message to a client.
 
         Do nothing if the client is not connected.
@@ -699,7 +702,7 @@ class EngineIoClient:
             return await self._http.request(
                 method=method,
                 url=url,
-                headers=cast(Union[dict, list, None], headers),
+                headers=cast(Union[dict[Any, Any], list[Any], None], headers),
                 content=body,
                 extensions=extensions,
             )
@@ -716,7 +719,7 @@ class EngineIoClient:
             return None
 
     async def _trigger_event(
-        self, event: EventName, *args, run_async: bool = False
+        self, event: EventName, *args: Any, run_async: bool = False
     ) -> Any:
         """Invoke an event handler.
 
@@ -747,7 +750,7 @@ class EngineIoClient:
             else:
                 if run_async:
 
-                    async def async_handler():
+                    async def async_handler() -> Any:
                         return self._handlers[event](*args)
 
                     try:
@@ -765,7 +768,12 @@ class EngineIoClient:
                     except Exception:  # pylint: disable=broad-except
                         self._logger.exception("%s handler error", event)
 
-    async def _ping_loop(self, task_status=trio.TASK_STATUS_IGNORED) -> None:
+    async def _ping_loop(
+        self,
+        task_status: trio_typing.TaskStatus[
+            trio.CancelScope
+        ] = trio.TASK_STATUS_IGNORED,
+    ) -> None:
         """This background task sends a PING to the server at the requested interval.
 
         To simplify the timeout handling, use the maximum of the ping interval and
@@ -807,7 +815,12 @@ class EngineIoClient:
 
         self._logger.info("Ping loop: Exiting ping task")
 
-    async def _read_loop_polling(self, task_status=trio.TASK_STATUS_IGNORED) -> None:
+    async def _read_loop_polling(
+        self,
+        task_status: trio_typing.TaskStatus[
+            trio.CancelScope
+        ] = trio.TASK_STATUS_IGNORED,
+    ) -> None:
         """Read and handle packets by polling the Engine.IO server.
 
         As a PING is sent every "dt = max(ping interval, ping timeout)", a PONG
@@ -891,7 +904,12 @@ class EngineIoClient:
 
         self._logger.info("Polling read loop: Exiting read loop task")
 
-    async def _read_loop_websocket(self, task_status=trio.TASK_STATUS_IGNORED):
+    async def _read_loop_websocket(
+        self,
+        task_status: trio_typing.TaskStatus[
+            trio.CancelScope
+        ] = trio.TASK_STATUS_IGNORED,
+    ) -> None:
         """Read and handle packets from the Engine.IO WebSocket connection.
 
         As a PING is sent every "dt = max(ping interval, ping timeout)", a PONG
@@ -911,7 +929,9 @@ class EngineIoClient:
                 self._logger.info("Websocket read loop: Wait for an incoming packet")
                 try:
                     with trio.fail_after(timeout):
-                        pkt = await self._ws.get_message()
+                        pkt = await cast(
+                            trio_ws.WebSocketConnection, self._ws
+                        ).get_message()
                         if pkt is None:
                             self._logger.warning(
                                 "Websocket read loop: WebSocket read returned None, "
@@ -980,7 +1000,12 @@ class EngineIoClient:
 
         self._logger.info("Websocket read loop: Exiting read loop task")
 
-    async def _write_loop(self, task_status=trio.TASK_STATUS_IGNORED):
+    async def _write_loop(
+        self,
+        task_status: trio_typing.TaskStatus[
+            trio.CancelScope
+        ] = trio.TASK_STATUS_IGNORED,
+    ) -> None:
         """Send packets to the server as they are pushed to the send queue.
 
         As a PING is enqueued every "dt = max(ping interval, ping timeout)", the same
@@ -1080,7 +1105,9 @@ class EngineIoClient:
                     # websocket. Packets are sent individually as websocket messages.
                     try:
                         for pkt in packets:
-                            await self._ws.send_message(pkt.encode(always_bytes=False))
+                            await cast(
+                                trio_ws.WebSocketConnection, self._ws
+                            ).send_message(pkt.encode(always_bytes=False))
                     except trio_ws.ConnectionClosed:
                         self._logger.info(
                             "Write loop: WebSocket connection was closed, aborting"

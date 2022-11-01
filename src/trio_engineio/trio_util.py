@@ -10,6 +10,10 @@ with code in https://gist.github.com/arthur-tacca/32c9b5fa81294850cabc890f4a898a
 
 See also (older proposal): https://github.com/python-trio/trio/issues/892
 """
+from __future__ import annotations
+
+from typing import Any, Callable, Coroutine
+
 import trio
 
 
@@ -70,21 +74,28 @@ class ResultCapture:
     """
 
     @classmethod
-    def start_soon(cls: type, nursery: trio.Nursery, routine, *args):
+    def start_soon(
+        cls: type,
+        nursery: trio.Nursery,
+        routine: Callable[..., Coroutine[Any, Any, Any]],
+        *args: Any,
+    ) -> "ResultCapture":
         """Runs the task in the given nursery and captures its result."""
-        task = cls(routine, *args)
+        task: "ResultCapture" = cls(routine, *args)
         nursery.start_soon(task.run)
         return task
 
-    def __init__(self, routine, *args):
+    def __init__(
+        self, routine: Callable[..., Coroutine[Any, Any, Any]], *args: Any
+    ) -> None:
         self._routine = routine
         self._args = args
         self._has_run_been_called = False
         self._done_event = trio.Event()
         self._result = None
-        self._exception = None
+        self._exception: BaseException | None = None
 
-    async def run(self):
+    async def run(self) -> None:
         """Runs the routine and captures its result.
 
         Typically, you would use the start_soon() class method, which constructs the
@@ -104,7 +115,7 @@ class ResultCapture:
             self._done_event.set()
 
     @property
-    def result(self):
+    def result(self) -> Any:
         """Returns the captured result of the task."""
         if not self._done_event.is_set():
             raise TaskNotDoneException(self)
@@ -113,7 +124,7 @@ class ResultCapture:
         return self._result
 
     @property
-    def exception(self):
+    def exception(self) -> BaseException | None:
         """Returns the exception raised by the task.
 
         If the task completed by returning rather than raising an exception then this
@@ -133,13 +144,13 @@ class ResultCapture:
         return self._exception
 
     @property
-    def done(self):
+    def done(self) -> bool:
         """Returns whether the task is done i.e. the result (or an exception) is
         captured.
         """
         return self._done_event.is_set()
 
-    async def wait_done(self):
+    async def wait_done(self) -> None:
         """Waits until the task is done.
 
         There are specialised situations where it may be useful to use this method to

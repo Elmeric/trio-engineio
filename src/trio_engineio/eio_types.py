@@ -8,7 +8,17 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Callable, Literal, Mapping, Protocol, Sequence, Type, Union
+from typing import (
+    Any,
+    Callable,
+    Literal,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+    Type,
+    Union,
+)
 
 import httpcore
 
@@ -90,11 +100,19 @@ def enforce_headers(
 
 
 class NoCachingURL(httpcore.URL):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        url: Union[bytes, str] = "",
+        *,
+        scheme: Union[bytes, str] = b"",
+        host: Union[bytes, str] = b"",
+        port: Optional[int] = None,
+        target: Union[bytes, str] = b"",
+    ) -> None:
+        super().__init__(url, scheme=scheme, host=host, port=port, target=target)
         self._target = self.target.split(b"&t=")[0]
 
-    @property   # type: ignore  # Waiting for https://github.com/python/mypy/pull/13475
+    @property  # type: ignore  # Waiting for https://github.com/python/mypy/pull/13475
     def target(self) -> bytes:
         return self._target + b"&t=" + enforce_bytes(str(time.time()), name="time")
 
@@ -102,7 +120,7 @@ class NoCachingURL(httpcore.URL):
     def target(self, value: bytes) -> None:
         self._target = enforce_bytes(value, name="target")
 
-    def add_to_target(self, value: str | bytes):
+    def add_to_target(self, value: str | bytes) -> None:
         self._target += enforce_bytes(value, name="target")
 
 
@@ -182,7 +200,7 @@ class JsonProtocol(Protocol):
         text: str | bytes,
         *,
         cls: Type[json.JSONDecoder] | None = None,
-        object_hook: Callable[[dict], Any] | None = None,
+        object_hook: Callable[[dict[Any, Any]], Any] | None = None,
         parse_float: Callable[[str], Any] | None = None,
         parse_int: Callable[[str], Any] | None = None,
         parse_constant: Callable[[str], Any] | None = None,
