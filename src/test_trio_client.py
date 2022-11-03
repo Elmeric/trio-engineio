@@ -37,7 +37,7 @@ def commands():
 
 
 def on_connect():
-    print(f"***** Connected")
+    print("***** Connected")
 
 
 def on_message(msg):
@@ -45,7 +45,7 @@ def on_message(msg):
 
 
 def on_disconnect():
-    print(f"***** Disconnected")
+    print("***** Disconnected")
 
 
 async def get_commands(eio: EngineIoClient):

@@ -4,6 +4,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+# pylint: disable=too-many-lines
+
 from __future__ import annotations
 
 import inspect
@@ -117,6 +119,7 @@ class EngineIoClient:
             - "disconnecting", transient state during connection closing.
     """
 
+    # pylint: disable=too-many-instance-attributes
     event_names: ClassVar[tuple[EventName, ...]] = typing.get_args(EventName)
     """A tuple of authorized keys to identify an event handlers (Class attribute).
     """
@@ -130,6 +133,7 @@ class EngineIoClient:
     _write_task_scope: trio.CancelScope
     _read_task_scope: trio.CancelScope
 
+    # pylint: disable=too-many-arguments
     def __init__(
         self,
         logger: logging.Logger | bool = False,
@@ -212,6 +216,7 @@ class EngineIoClient:
             return set_handler
         return set_handler(handler)
 
+    # pylint: disable=too-many-arguments
     async def connect(
         self,
         nursery: trio.Nursery,
@@ -483,6 +488,8 @@ class EngineIoClient:
         self._read_task_scope = await nursery.start(self._read_loop_polling)
         return True
 
+    # pylint: disable=too-many-branches
+    # pylint: disable=too-many-statements
     async def _connect_websocket(
         self,
         nursery: trio.Nursery,
@@ -666,6 +673,7 @@ class EngineIoClient:
         )
         await self._send_channel.send(pkt)
 
+    # pylint: disable=too-many-arguments
     async def _send_request(
         self,
         method: bytes | str,
@@ -756,7 +764,7 @@ class EngineIoClient:
                     try:
                         async with trio.open_nursery() as nursery:
                             task = ResultCapture.start_soon(nursery, async_handler)
-                    except BaseException:
+                    except BaseException:  # pylint: disable=broad-except
                         pass
                     try:
                         return task.result
@@ -1000,6 +1008,8 @@ class EngineIoClient:
 
         self._logger.info("Websocket read loop: Exiting read loop task")
 
+    # pylint: disable=too-many-branches
+    # pylint: disable=too-many-statements
     async def _write_loop(
         self,
         task_status: trio_typing.TaskStatus[
