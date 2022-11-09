@@ -3,7 +3,6 @@
 
 command_isort() {
    echo "Running isort formatter..."
-   poetry_run isort --color "$@" .
+   poetry_run isort "$@" .
    echo "done"
 }
-
