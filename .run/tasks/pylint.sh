@@ -6,6 +6,5 @@ help_pylint() {
 }
 
 task_pylint() {
-   run_command pylint
+   run_command pylint "$@"
 }
-
