@@ -18,7 +18,7 @@ classifiers=[
 ]
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.7.2"
 trio = "^0.22.0"
 httpcore = "^0.15.0"
 trio-websocket = "^0.9.2"

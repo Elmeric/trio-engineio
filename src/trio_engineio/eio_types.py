@@ -7,28 +7,35 @@
 from __future__ import annotations
 
 import json
+import sys
 import time
 from typing import (
     Any,
     Callable,
-    Literal,
+    Dict,
+    List,
     Mapping,
     Optional,
-    Protocol,
     Sequence,
+    Tuple,
     Type,
     Union,
 )
 
 import httpcore
 
+if sys.version_info >= (3, 8):
+    from typing import Literal, Protocol
+else:
+    from typing_extensions import Literal, Protocol
+
 EventName = Literal["connect", "disconnect", "message"]
 Transport = Literal["polling", "websocket"]
-Headers = list[tuple[bytes, bytes]]
-HeadersAsSequence = Sequence[tuple[Union[bytes, str], Union[bytes, str]]]
+Headers = List[Tuple[bytes, bytes]]
+HeadersAsSequence = Sequence[Tuple[Union[bytes, str], Union[bytes, str]]]
 HeadersAsMapping = Mapping[Union[bytes, str], Union[bytes, str]]
 TimeoutKey = Literal["connect", "read", "write", "pool"]
-Timeouts = dict[TimeoutKey, float]
+Timeouts = Dict[TimeoutKey, float]
 
 
 def enforce_bytes(value: bytes | str, *, name: str) -> bytes:

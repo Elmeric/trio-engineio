@@ -11,12 +11,14 @@ from __future__ import annotations
 import inspect
 import logging
 import ssl
-import typing
+import sys
 from typing import (
     Any,
     AsyncIterator,
     Callable,
     ClassVar,
+    Dict,
+    List,
     Optional,
     Sequence,
     Union,
@@ -47,6 +49,11 @@ from .eio_types import (
 )
 from .exceptions import EngineIoConnectionError
 from .trio_util import ResultCapture, TaskWrappedException
+
+if sys.version_info >= (3, 8):
+    from typing import get_args
+else:
+    from typing_extensions import get_args
 
 default_logger = logging.getLogger("engineio.client")
 connected_clients: list["EngineIoClient"] = []
@@ -120,7 +127,7 @@ class EngineIoClient:
     """
 
     # pylint: disable=too-many-instance-attributes
-    event_names: ClassVar[tuple[EventName, ...]] = typing.get_args(EventName)
+    event_names: ClassVar[tuple[EventName, ...]] = get_args(EventName)
     """A tuple of authorized keys to identify an event handlers (Class attribute).
     """
     _base_url: NoCachingURL
@@ -710,7 +717,7 @@ class EngineIoClient:
             return await self._http.request(
                 method=method,
                 url=url,
-                headers=cast(Union[dict[Any, Any], list[Any], None], headers),
+                headers=cast(Union[Dict[Any, Any], List[Any], None], headers),
                 content=body,
                 extensions=extensions,
             )
