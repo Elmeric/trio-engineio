@@ -8,6 +8,7 @@ on:
       - main
   schedule:
     - cron: '35 19 10 * *'  # 10th of the month at 7:35pm UTC
+  workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
