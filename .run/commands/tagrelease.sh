@@ -70,4 +70,3 @@ command_tagrelease() {
    echo "*** Version v$VERSION has been released and committed; you may publish now"
    echo ""
 }
-
