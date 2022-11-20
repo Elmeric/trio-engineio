@@ -33,12 +33,13 @@ coveralls = "^3.3.1"
 
 
 [tool.poetry.group.dev.dependencies]
-black = "^22.8.0"
-isort = "^5.10.1"
 pylint = { version = "^2.15.5", python = ">=3.7.2,<4.0" }
 mypy = "^0.982"
 trio-typing = "^0.7.0"
 pre-commit = "^2.20.0"
+invoke = "^1.7.3"
+black = {version = "^22.10.0", extras = ["colorama"]}
+isort = {version = "^5.10.1", extras = ["colors"]}
 
 [build-system]
 requires = ["poetry-core"]
@@ -56,7 +57,7 @@ addopts = [
     "--import-mode=importlib",
     "--cov-report=term-missing",
     "--cov-branch",
-    "--cov=trio_engineio"
+#    "--cov=trio_engineio"
 ]
 trio_mode = true
 testpaths = [
