@@ -230,7 +230,7 @@ typing-extensions = {version = "*", markers = "python_version < \"3.8\""}
 
 [[package]]
 name = "httpcore"
-version = "0.16.0"
+version = "0.16.1"
 description = "A minimal low-level HTTP client."
 category = "main"
 optional = false
@@ -950,8 +950,8 @@ h11 = [
     {file = "h11-0.14.0.tar.gz", hash = "sha256:8f19fbbe99e72420ff35c00b27a34cb9937e902a8b810e2c88300c6f0a3b699d"},
 ]
 httpcore = [
-    {file = "httpcore-0.16.0-py3-none-any.whl", hash = "sha256:5b9a9211757b01bea0bdfe39581e2af893c3932b5c6d66f94dff618ca43ffe43"},
-    {file = "httpcore-0.16.0.tar.gz", hash = "sha256:80985931b4d94956ade2b64c266f17429fb840e1db37e8a1951f8b6d2e4faf3c"},
+    {file = "httpcore-0.16.1-py3-none-any.whl", hash = "sha256:8d393db683cc8e35cc6ecb02577c5e1abfedde52b38316d038932a84b4875ecb"},
+    {file = "httpcore-0.16.1.tar.gz", hash = "sha256:3d3143ff5e1656a5740ea2f0c167e8e9d48c5a9bbd7f00ad1f8cff5711b08543"},
 ]
 identify = [
     {file = "identify-2.5.8-py2.py3-none-any.whl", hash = "sha256:48b7925fe122720088aeb7a6c34f17b27e706b72c61070f27fe3789094233440"},
