@@ -7,6 +7,4 @@
 from .exceptions import EngineIoConnectionError
 from .trio_client import EngineIoClient
 
-__version__ = "0.1.4"
-
-__all__ = ["__version__", "EngineIoClient", "EngineIoConnectionError"]
+__all__ = ["EngineIoClient", "EngineIoConnectionError"]
