@@ -19,10 +19,13 @@ def release(c, version):
     yet, so you can always remove the tag (i.e. git tag -d v0.1.29) and revert your
     commit (git reset HEAD~1) if you made a mistake.
     """
-    # TODO: validate the version with a regex.
-    if re.match(r"^[v|V]?[0-9]+.[0-9]+.[0-9]+$", version):
-        pass
-    version = version[1:] if version[0] in ("v", "V") else version
+    v_pattern = re.compile(r"^[v|V]?(?P<version>\d+\.\d+\.\d+)$", re.ASCII)
+    match = v_pattern.match(version)
+    if match:
+        version = match.group("version")
+    else:
+        print(f"*** {version} is not a valid version")
+        sys.exit(1)
 
     tag = f"v{version}"
     if len(c.run(f"git tag -l {tag}", hide="out").stdout) != 0:

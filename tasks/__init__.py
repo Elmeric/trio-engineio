@@ -17,7 +17,7 @@ from invoke import Collection, task
 from tasks import checks, format, test, build, publish, install, release
 
 BASIC_TASKS = (install, format, checks, build, test)
-ADDITIONAL_TASKS = (publish, release)
+ADDITIONAL_TASKS = (release, publish)
 
 @task(default=True)
 def welcome(c):
