@@ -11,8 +11,7 @@ import tasks.commands as commands
 
 @task
 def black(c):
-    """Run the black code formatter.
-    """
+    """Run the black code formatter."""
     cmd = commands.black(check=False, diff=False, color=True)
 
     print("=" * 72)
@@ -23,8 +22,7 @@ def black(c):
 
 @task
 def isort(c):
-    """Run the isort import formatter.
-    """
+    """Run the isort import formatter."""
     cmd = commands.isort(check=False, diff=False, color=True)
 
     print("=" * 72)
@@ -35,8 +33,7 @@ def isort(c):
 
 @task(name="all", default=True)
 def format_(c):
-    """Run the code formatters.
-    """
+    """Run the code formatters."""
 
     print()
     black(c)

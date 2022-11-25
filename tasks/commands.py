@@ -49,11 +49,13 @@ def pylint(ignore_tests=False):
     return cmd
 
 
-def pytest(coverage=None):
+def pytest(coverage=None, html=False):
     cmd = "pytest"
     if coverage:
         cov_package = "src"
         if isinstance(coverage, str):
             cov_package = coverage
         cmd = f"{cmd} --cov={cov_package}"
+        if html:
+            cmd = f"{cmd} --cov-report=html:.htmlcov"
     return cmd

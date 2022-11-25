@@ -6,12 +6,12 @@
 
 import sys
 from pathlib import Path
-from invoke import task, UnexpectedExit
+
+from invoke import UnexpectedExit, task
 
 
 def poetry_install(c):
-    """Create and update the virtualenv, synchronizing it to versions in poetry.lock.
-    """
+    """Create and update the virtualenv, synchronizing it to versions in poetry.lock."""
     print("=" * 72)
     print(f"Setup the virtualenv via Poetry...")
 
@@ -25,8 +25,7 @@ def poetry_install(c):
 
 
 def precommit_install(c):
-    """Install pre-commit hooks.
-    """
+    """Install pre-commit hooks."""
     print("=" * 72)
     print(f"Installing pre-commit hooks...")
 
@@ -34,14 +33,13 @@ def precommit_install(c):
         c.run("poetry run pre-commit install")
         print("==> done")
     else:
-        print("*** Failed to install the virtualenv")
+        print("*** Failed to install pre-commit hooks: not a Git repository")
         sys.exit(1)
 
 
 @task(default=True)
 def install(c):
-    """Settting up the virtualenv via Poetry and install pre-commit hooks.
-    """
+    """Settting up the virtualenv via Poetry and install pre-commit hooks."""
 
     print()
     poetry_install(c)
@@ -50,6 +48,7 @@ def install(c):
     precommit_install(c)
 
 
-
 def help_(c):
-    print("- inv[oke] install: Setup the virtualenv via Poetry and install pre-commit hooks")
+    print(
+        "- inv[oke] install: Setup the virtualenv via Poetry and install pre-commit hooks"
+    )

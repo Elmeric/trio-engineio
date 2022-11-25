@@ -11,8 +11,7 @@ import tasks.commands as commands
 
 @task
 def black(c, diff=False, color=True, warn_only=False):
-    """Run the black code formatter in check only mode.
-    """
+    """Run the black code formatter in check only mode."""
     cmd = commands.black(check=True, diff=diff, color=color)
 
     print("=" * 72)
@@ -23,8 +22,7 @@ def black(c, diff=False, color=True, warn_only=False):
 
 @task
 def isort(c, diff=False, color=True, warn_only=False):
-    """Run the isort import formatter in check only mode.
-    """
+    """Run the isort import formatter in check only mode."""
     cmd = commands.isort(check=True, diff=diff, color=color)
 
     print("=" * 72)
@@ -35,9 +33,8 @@ def isort(c, diff=False, color=True, warn_only=False):
 
 @task
 def mypy(c, show_absolute_path=True, warn_only=False):
+    """Run the mypy types checker."""
     cmd = commands.mypy(show_absolute_path)
-    """Run the mypy types checker.
-    """
 
     print("=" * 72)
     print("Running mypy checks...")
@@ -47,8 +44,7 @@ def mypy(c, show_absolute_path=True, warn_only=False):
 
 @task
 def pylint(c, ignore_tests=False, warn_only=False):
-    """Run the pylint code linter.
-    """
+    """Run the pylint code linter."""
     cmd = commands.pylint(ignore_tests)
 
     print("=" * 72)
