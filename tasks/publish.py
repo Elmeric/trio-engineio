@@ -5,15 +5,15 @@
 # LICENSE file in the root directory of this source tree.
 
 import sys
-from invoke import task, UnexpectedExit
+
+from invoke import UnexpectedExit, task
 
 from .build import poetry_build
 
 
 @task(default=True)
 def publish(c, build_to="dist"):
-    """Publish the current code to PyPI and push to GitHub.
-    """
+    """Publish the current code to PyPI and push to GitHub."""
     print()
     print("=" * 72)
     print(f"Publishing the current code...")

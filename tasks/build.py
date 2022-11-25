@@ -5,12 +5,12 @@
 # LICENSE file in the root directory of this source tree.
 
 import sys
-from invoke import task, UnexpectedExit
+
+from invoke import UnexpectedExit, task
 
 
 def poetry_build(c, dir_="dist"):
-    """Build release artifacts into the dist/ directory.
-    """
+    """Build release artifacts into the dist/ directory."""
     c.run(f"rm -f {dir_}/*")
 
     c.run("poetry version")
@@ -26,8 +26,7 @@ def poetry_build(c, dir_="dist"):
 
 @task(default=True)
 def build(c, dir_="dist"):
-    """Build artifacts in the dist/ directory.
-    """
+    """Build artifacts in the dist/ directory."""
     print()
     print("=" * 72)
     print(f"Building release artifacts...")
