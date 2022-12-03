@@ -1,0 +1,26 @@
+.md-typeset hr {
+    border-bottom-width: 0.2rem;
+}
+
+div.md-content h1:first-of-type {
+    text-align: center;
+    font-size: 60px;
+    font-weight: 300;
+    margin-bottom: 0.25em;
+}
+
+article.md-typeset > p:first-of-type {
+    text-align: center;
+}
+
+div.md-content p.admonition-title:first-of-type {
+    text-align: left;
+}
+
+div.md-content h1:first-of-type .headerlink {
+    display: none;
+}
+
+.md-content__button {
+    display: none;
+}
