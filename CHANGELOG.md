@@ -5,6 +5,12 @@ to [Semantic Versioning].
 
 ## [Unreleased]
 
+## [0.1.1] - 2022-12-03
+
+### Fixed
+- Import error when trying to import trio-typing. It is now only imported for 
+static type checking in develeopment environment.
+
 ### Changed
 - `__version__` is no more a public attribute of the package
 
@@ -25,7 +31,8 @@ dedicated bash scripts
 
 - First release.
 
-[unreleased]: https://github.com/Elmeric/trio-engineio/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/Elmeric/trio-engineio/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Elmeric/trio-engineio/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Elmeric/trio-engineio/releases/tag/v0.1.0
 
 [Keep a Changelog]: https://keepachangelog.com/en/1.0.0/
