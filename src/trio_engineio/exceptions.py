@@ -6,8 +6,8 @@
 
 
 class EngineIOError(Exception):
-    pass
+    """Base class for the trio_engineio exceptions."""
 
 
 class EngineIoConnectionError(EngineIOError):
-    pass
+    """Exception raised when connection to the server failed."""

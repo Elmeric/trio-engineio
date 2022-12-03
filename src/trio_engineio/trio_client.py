@@ -104,6 +104,7 @@ class EngineIoClient:
 
     Args:
         logger: The logging configuration. Possible values are:
+
             - `False` to disable logging. Note that fatal errors will still be logged.
             - `True` to enable logging at INFO log level.
             - a custom `logging.Logger` object.
@@ -121,8 +122,9 @@ class EngineIoClient:
     Attributes:
         state: A string representing the state of the Engine.IO connection. Possible
             values are:
-            - "disconnected" at initialization or after connection closing.
-            - "connected" after a successful connection handshake.
+
+            - "disconnected", at initialization or after connection closing.
+            - "connected", after a successful connection handshake.
             - "disconnecting", transient state during connection closing.
     """
 
@@ -202,15 +204,19 @@ class EngineIoClient:
 
         Examples:
             - As a decorator:
-                    @eio.on('connect')
-                    def connect_handler():
-                        print('Connection request')
+                ``` python
+                @eio.on('connect')
+                def connect_handler():
+                    print('Connection request')
+                ```
 
             - As a method:
-                    def message_handler(msg):
-                        print('Received message: ', msg)
-                        eio.send('response')
-                    eio.on('message', message_handler)
+                ``` python
+                def message_handler(msg):
+                    print('Received message: ', msg)
+                    eio.send('response')
+                eio.on('message', message_handler)
+                ```
         """
         if event not in EngineIoClient.event_names:
             raise ValueError("Invalid event")
@@ -256,9 +262,11 @@ class EngineIoClient:
             `True` if the connection succeeded, `False` otherwise.
 
         Examples:
+            ``` python
             eio = EngineIoClient()
             async with trio.open_nursery() as nursery:
                 await eio.connect(nursery, "http://127.0.0.1:1234")
+            ```
         """
         # global async_signal_handler_set
         # if not async_signal_handler_set and \
@@ -364,7 +372,7 @@ class EngineIoClient:
 
         Returns:
             Either "polling" or "websocket" when the client is connected
-            or `None` otherwise.
+                or `None` otherwise.
         """
         return self._current_transport
 
