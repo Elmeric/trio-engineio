@@ -13,6 +13,7 @@ import logging
 import ssl
 import sys
 from typing import (
+    TYPE_CHECKING,
     Any,
     AsyncIterator,
     Callable,
@@ -27,7 +28,6 @@ from typing import (
 
 import httpcore
 import trio
-import trio_typing
 import trio_websocket as trio_ws  # type: ignore
 from httpcore.backends import trio as trio_backend
 
@@ -49,6 +49,9 @@ from .eio_types import (
 )
 from .exceptions import EngineIoConnectionError
 from .trio_util import ResultCapture, TaskWrappedException
+
+if TYPE_CHECKING:  # pragma: no cover
+    import trio_typing
 
 if sys.version_info >= (3, 8):
     from typing import get_args
