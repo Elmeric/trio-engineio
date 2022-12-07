@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build-and-test:
-    uses: Elmeric/my-gha-workflows/.github/workflows/poetry-build-and-test.yml@v1
+    uses: Elmeric/my-gha-workflows/.github/workflows/poetry-build-and-test.yml@dev
     secrets: inherit
     with:
 #      matrix-os-version: "[ 'ubuntu-latest' ]"
