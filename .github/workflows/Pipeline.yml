@@ -1,0 +1,145 @@
+name: Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+  schedule:
+    - cron: '35 19 10 * *'  # 10th of the month at 7:35pm UTC
+
+  workflow_dispatch:
+
+jobs:
+
+  # This job is a workaround for global variables
+  # See https://github.com/actions/runner/issues/480
+  Params:
+    uses: Elmeric/my-gha-workflows/Actions/.github/workflows/Parameters.yml@dev
+    with:
+      name: Trio-Engineio
+      # Optional
+      system_list: 'ubuntu windows macos'
+      python_version: '3.11'
+      python_version_list: '3.7 3.8 3.9 3.10 3.11'
+
+  CodeCheck:
+    uses: Elmeric/my-gha-workflows/Actions/.github/workflows/CodeCheck.yml@dev
+    needs:
+      - Params
+    with:
+      poetry-version: "1.2.2"
+      commands: inv checks.all
+      # Optional
+      python_version: ${{ needs..Params.outputs.python_version }}
+
+  UnitTesting:
+    uses: Elmeric/my-gha-workflows/Actions/.github/workflows/UnitTesting.yml@dev
+    needs:
+      - Params
+      - CodeCheck
+    with:
+      jobs: ${{ needs.Params.outputs.python_jobs }}
+      poetry-version: "1.2.2"
+      commands: inv test -c trio_engineio
+
+  Coverage:
+    uses: Elmeric/my-gha-workflows/Actions/.github/workflows/CoverageCollection.yml@dev
+    needs:
+      - Params
+      - UnitTesting
+
+#  PublishTestResults:
+#    uses: pyTooling/Actions/.github/workflows/PublishTestResults.yml@main
+#    needs:
+#      - UnitTesting
+#      - StaticTypeCheck
+#    with:
+#      # Optional
+#      report_files: artifacts/**/*.xml
+#
+#  Package:
+#    uses: pyTooling/Actions/.github/workflows/Package.yml@main
+#    needs:
+#      - Params
+#      - Coverage
+#    with:
+#      artifact: ${{ fromJson(needs.Params.outputs.artifact_names).package_all }}
+#      # Optional
+#      python_version: ${{ needs..Params.outputs.python_version }}
+#      requirements: 'wheel'
+#
+#  Release:
+#    uses: pyTooling/Actions/.github/workflows/Release.yml@main
+#    if: startsWith(github.ref, 'refs/tags')
+#    needs:
+#      - UnitTesting
+#      - Coverage
+#      - StaticTypeCheck
+#      - Package
+#
+#  PublishOnPyPI:
+#    uses: pyTooling/Actions/.github/workflows/PublishOnPyPI.yml@main
+#    if: startsWith(github.ref, 'refs/tags')
+#    needs:
+#      - Params
+#      - Release
+#      - Package
+#    with:
+#      artifact: ${{ fromJson(needs.Params.outputs.artifact_names).package_all }}
+#      # Optional
+#      python_version: ${{ needs..Params.outputs.python_version }}
+#      requirements: 'wheel twine'
+#    secrets:
+#      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+#
+#  VerifyDocs:
+#    uses: pyTooling/Actions/.github/workflows/VerifyDocs.yml@main
+#    needs:
+#      - Params
+#    with:
+#      # Optional
+#      python_version: ${{ needs..Params.outputs.python_version }}
+#
+#  BuildTheDocs:
+#    uses: pyTooling/Actions/.github/workflows/BuildTheDocs.yml@main
+#    needs:
+#      - Params
+#      - VerifyDocs
+#    with:
+#      artifact: ${{ fromJson(needs.Params.outputs.artifact_names).documentation_html }}
+#
+#  PublishToGitHubPages:
+#    uses: pyTooling/Actions/.github/workflows/PublishToGitHubPages.yml@main
+#    needs:
+#      - Params
+#      - BuildTheDocs
+#      - Coverage
+#      - StaticTypeCheck
+#    with:
+#      doc: ${{ fromJson(needs.Params.outputs.artifact_names).documentation_html }}
+#      # Optional
+#      coverage: ${{ fromJson(needs.Params.outputs.artifact_names).codecoverage_html }}
+#      typing: ${{ fromJson(needs.Params.outputs.artifact_names).statictyping_html }}
+#
+#  ArtifactCleanUp:
+#    uses: pyTooling/Actions/.github/workflows/ArtifactCleanUp.yml@main
+#    needs:
+#      - Params
+#      - PublishTestResults
+#      - Coverage
+#      - StaticTypeCheck
+#      - BuildTheDocs
+#      - PublishToGitHubPages
+#    with:
+#      package: ${{ fromJson(needs.Params.outputs.artifact_names).package_all }}
+#      remaining: |
+#        ${{ fromJson(needs.Params.outputs.artifact_names).unittesting_xml }}-*
+#        ${{ fromJson(needs.Params.outputs.artifact_names).codecoverage_html }}
+#        ${{ fromJson(needs.Params.outputs.artifact_names).statictyping_html }}
+#        ${{ fromJson(needs.Params.outputs.artifact_names).statictyping_junit }}
+#        ${{ fromJson(needs.Params.outputs.artifact_names).documentation_html }}

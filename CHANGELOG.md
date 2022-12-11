@@ -5,6 +5,10 @@ to [Semantic Versioning].
 
 ## [Unreleased]
 
+### Miscellaneous
+
+- Documentation dependencies are now in a dedicated Poetry "docs" group
+
 ## [0.1.1] - 2022-12-03
 
 ### Fixed
@@ -17,7 +21,7 @@ static type checking in develeopment environment.
 ### Documentation
 - Create the library documentation site on GitHub Pages
 
-### Miscellaneous 
+### Miscellaneous
 
 - Fixed regression on `isort` config when running on GitHub Actions
 - The Changelog format is now based on [Keep a Changelog]
