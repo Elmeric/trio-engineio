@@ -35,7 +35,7 @@ jobs:
       poetry-version: "1.2.2"
       commands: inv checks.all
       # Optional
-      python_version: ${{ needs..Params.outputs.python_version }}
+      python_version: "3.11"
 
   UnitTesting:
     uses: Elmeric/my-gha-workflows/.github/workflows/UnitTesting.yml@dev
