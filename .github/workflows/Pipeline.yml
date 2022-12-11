@@ -19,7 +19,7 @@ jobs:
   # This job is a workaround for global variables
   # See https://github.com/actions/runner/issues/480
   Params:
-    uses: Elmeric/my-gha-workflows/Actions/.github/workflows/Parameters.yml@dev
+    uses: Elmeric/my-gha-workflows/.github/workflows/Parameters.yml@dev
     with:
       name: Trio-Engineio
       # Optional
@@ -28,7 +28,7 @@ jobs:
       python_version_list: '3.7 3.8 3.9 3.10 3.11'
 
   CodeCheck:
-    uses: Elmeric/my-gha-workflows/Actions/.github/workflows/CodeCheck.yml@dev
+    uses: Elmeric/my-gha-workflows/.github/workflows/CodeCheck.yml@dev
     needs:
       - Params
     with:
@@ -38,7 +38,7 @@ jobs:
       python_version: ${{ needs..Params.outputs.python_version }}
 
   UnitTesting:
-    uses: Elmeric/my-gha-workflows/Actions/.github/workflows/UnitTesting.yml@dev
+    uses: Elmeric/my-gha-workflows/.github/workflows/UnitTesting.yml@dev
     needs:
       - Params
       - CodeCheck
@@ -48,7 +48,7 @@ jobs:
       commands: inv test -c trio_engineio
 
   Coverage:
-    uses: Elmeric/my-gha-workflows/Actions/.github/workflows/CoverageCollection.yml@dev
+    uses: Elmeric/my-gha-workflows/.github/workflows/CoverageCollection.yml@dev
     needs:
       - Params
       - UnitTesting
