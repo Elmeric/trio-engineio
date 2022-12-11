@@ -26,6 +26,7 @@ jobs:
       system_list: 'ubuntu windows macos'
       python_version: '3.11'
       python_version_list: '3.7 3.8 3.9 3.10 3.11'
+      exclude_list: "windows:3.7 windows:3.8 windows:3.9 windows:3.10 macos:3.7 macos:3.8 macos:3.9 macos:3.10"
 
   CodeCheck:
     uses: Elmeric/my-gha-workflows/.github/workflows/CodeCheck.yml@dev
