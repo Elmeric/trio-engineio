@@ -46,7 +46,7 @@ jobs:
     with:
       jobs: ${{ needs.Params.outputs.python_jobs }}
       poetry-version: "1.2.2"
-      commands: inv test -c trio_engineio
+      commands: inv test -c trio_engineio --lcov
 
   Coverage:
     uses: Elmeric/my-gha-workflows/.github/workflows/CoverageCollection.yml@dev

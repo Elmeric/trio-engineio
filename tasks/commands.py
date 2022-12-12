@@ -49,7 +49,7 @@ def pylint(ignore_tests=False):
     return cmd
 
 
-def pytest(coverage=None, html=False):
+def pytest(coverage=None, html=False, lcov=False):
     cmd = "pytest"
     if coverage:
         cov_package = "src"
@@ -58,4 +58,6 @@ def pytest(coverage=None, html=False):
         cmd = f"{cmd} --cov={cov_package}"
         if html:
             cmd = f"{cmd} --cov-report=html:.htmlcov"
+        if lcov:
+            cmd = f"{cmd} --cov-report=lcov:lcov.info"
     return cmd

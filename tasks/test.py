@@ -13,9 +13,9 @@ import tasks.commands as commands
 
 
 @task(optional=["coverage"], default=True)
-def test(c, coverage=None, html=False):
+def test(c, coverage=None, html=False, lcov=False):
     """Run the unit tests."""
-    cmd = commands.pytest(coverage, html)
+    cmd = commands.pytest(coverage, html, lcov)
 
     print()
     print("=" * 72)
