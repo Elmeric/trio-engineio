@@ -35,7 +35,7 @@ invoke = "^2.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pylint = { version = "^2.15.5", python = ">=3.7.2,<4.0" }
-mypy = "^0.982"
+mypy = "^0.991"
 trio-typing = "^0.7.0"
 pre-commit = "^2.20.0"
 invoke = "^2.0.0"

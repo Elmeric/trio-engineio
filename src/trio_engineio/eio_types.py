@@ -119,7 +119,7 @@ class NoCachingURL(httpcore.URL):
         super().__init__(url, scheme=scheme, host=host, port=port, target=target)
         self._target = self.target.split(b"&t=")[0]
 
-    @property  # type: ignore  # Waiting for https://github.com/python/mypy/pull/13475
+    @property
     def target(self) -> bytes:
         return self._target + b"&t=" + enforce_bytes(str(time.time()), name="time")
 
