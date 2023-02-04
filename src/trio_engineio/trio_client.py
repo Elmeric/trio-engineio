@@ -987,7 +987,9 @@ class EngineIoClient:
                     pkt = pkt.encode("utf-8")
                 try:
                     pkt = packet.Packet(encoded_packet=pkt)
-                except Exception as exc:  # pragma: no cover    # pylint: disable=broad-except
+                except (
+                    Exception
+                ) as exc:  # pragma: no cover    # pylint: disable=broad-except
                     self._logger.info(
                         "Websocket read loop: Unexpected error decoding packet: %s, "
                         "aborting",
@@ -1049,7 +1051,6 @@ class EngineIoClient:
             task_status.started(scope)
 
             while self.state == "connected":
-
                 # Wait for packets to write
                 with trio.move_on_after(timeout) as cancel_scope:
                     try:

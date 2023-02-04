@@ -39,7 +39,7 @@ mypy = "^0.991"
 trio-typing = "^0.7.0"
 pre-commit = "^2.20.0"
 invoke = "^2.0.0"
-black = {version = "^22.10.0", extras = ["colorama"]}
+black = {version = "^23.1.0", extras = ["colorama"]}
 isort = {version = "^5.10.1", extras = ["colors"]}
 
 
