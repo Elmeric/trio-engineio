@@ -3,7 +3,7 @@
 
 [![python](https://img.shields.io/badge/python-3.7%2B-blue)](https://github.com/Elmeric/trio-engineio)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Tests](https://github.com/Elmeric/trio-engineio/actions/workflows/test.yml/badge.svg)](https://github.com/Elmeric/trio-engineio/actions/workflows/test.yml)
+[![Tests](https://github.com/Elmeric/trio-engineio/actions/workflows/Pipeline.yml/badge.svg)](https://github.com/Elmeric/trio-engineio/actions/workflows/Pipeline.yml)
 [![Coverage Status](https://coveralls.io/repos/github/Elmeric/trio-engineio/badge.svg)](https://coveralls.io/github/Elmeric/trio-engineio)
 [![license](https://img.shields.io/badge/license-BSD--3--Clause-green)](https://github.com/Elmeric/trio-engineio/blob/master/LICENSE)
 
