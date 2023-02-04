@@ -988,8 +988,8 @@ class EngineIoClient:
                 try:
                     pkt = packet.Packet(encoded_packet=pkt)
                 except (
-                    Exception
-                ) as exc:  # pragma: no cover    # pylint: disable=broad-except
+                    Exception  # pylint: disable=broad-except
+                ) as exc:  # pragma: no cover
                     self._logger.info(
                         "Websocket read loop: Unexpected error decoding packet: %s, "
                         "aborting",
