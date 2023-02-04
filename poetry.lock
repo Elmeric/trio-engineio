@@ -1132,20 +1132,20 @@ testing = ["fields", "hunter", "process-tests", "pytest-xdist", "six", "virtuale
 
 [[package]]
 name = "pytest-trio"
-version = "0.7.0"
+version = "0.8.0"
 description = "Pytest plugin for trio"
 category = "dev"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.7"
 files = [
-    {file = "pytest-trio-0.7.0.tar.gz", hash = "sha256:c01b741819aec2c419555f28944e132d3c711dae1e673d63260809bf92c30c31"},
+    {file = "pytest-trio-0.8.0.tar.gz", hash = "sha256:8363db6336a79e6c53375a2123a41ddbeccc4aa93f93788651641789a56fb52e"},
+    {file = "pytest_trio-0.8.0-py3-none-any.whl", hash = "sha256:e6a7e7351ae3e8ec3f4564d30ee77d1ec66e1df611226e5618dbb32f9545c841"},
 ]
 
 [package.dependencies]
-async_generator = ">=1.9"
-outcome = "*"
-pytest = ">=3.6"
-trio = ">=0.15.0"
+outcome = ">=1.1.0"
+pytest = ">=7.2.0"
+trio = ">=0.22.0"
 
 [[package]]
 name = "python-dateutil"
@@ -1616,4 +1616,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.7.2"
-content-hash = "95cc6cf8d183c01d6a4be72dd9f17a460cc7c9a419dce531f1a039f81dc4ed78"
+content-hash = "b637ed88fd8eae2b05977dc1cb06b53ded88668c4873f805b929b3e7b2e8443e"
