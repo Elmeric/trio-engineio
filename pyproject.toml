@@ -47,7 +47,7 @@ isort = {version = "^5.12.0", extras = ["colors"], python = ">=3.8.0,<4.0.0"}
 mkdocs = "^1.4.2"
 mkdocstrings = {version = "^0.20.0", extras = ["python"]}
 mkdocs-material = {version = "^9.0.11", extras = ["python"]}
-pymdown-extensions = "^9.9"
+pymdown-extensions = "^10.0"
 markdown-callouts = "^0.3.0"
 invoke = "^2.0.0"
 
