@@ -44,9 +44,9 @@ isort = {version = "^5.12.0", python = ">=3.8.0,<4.0.0", extras = ["colors"]}
 
 
 [tool.poetry.group.docs.dependencies]
-mkdocs = "^1.4.2"
-mkdocstrings = {version = "^0.21.0", python = ">=3.8.0,<4.0.0", extras = ["python"]}
-mkdocs-material = {version = "^9.0.11", extras = ["python"]}
+mkdocs = {version = "^1.4.2", python = ">=3.8.0,<4.0.0"}
+mkdocstrings = {version = "^0.22.0", python = ">=3.8.0,<4.0.0", extras = ["python"]}
+mkdocs-material = {version = "^9.0.11", python = ">=3.8.0,<4.0.0", extras = ["python"]}
 pymdown-extensions = "^10.0"
 markdown-callouts = "^0.3.0"
 invoke = "^2.0.0"
