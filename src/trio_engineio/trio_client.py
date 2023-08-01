@@ -29,7 +29,6 @@ from typing import (
 import httpcore
 import trio
 import trio_websocket as trio_ws  # type: ignore
-from httpcore.backends import trio as trio_backend
 
 from . import packet, payload
 from ._ssl import default_ssl_context
@@ -719,7 +718,7 @@ class EngineIoClient:
         """
         if self._http is None:
             self._http = httpcore.AsyncConnectionPool(
-                network_backend=trio_backend.TrioBackend()
+                network_backend=httpcore.TrioBackend()
             )
 
         extensions = {} if timeouts is None else {"timeout": timeouts}
