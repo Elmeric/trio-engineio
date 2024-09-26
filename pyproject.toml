@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "trio-engineio"
-version = "0.1.1"
+version = "0.2.0"
 description = "An asynchronous Engine.IO client using the trio framework"
 authors = ["Eric Lemoine <erik.lemoine@gmail.com>"]
 license = "BSD-3-Clause"
