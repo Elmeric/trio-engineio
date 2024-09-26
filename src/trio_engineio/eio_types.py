@@ -199,8 +199,7 @@ class JsonProtocol(Protocol):
         default: Callable[[Any], Any] | None = None,
         sort_keys: bool = False,
         **kw: Any,
-    ) -> str:
-        ...  # pragma: no cover
+    ) -> str: ...  # pragma: no cover
 
     def loads(
         self,
@@ -213,5 +212,4 @@ class JsonProtocol(Protocol):
         parse_constant: Callable[[str], Any] | None = None,
         object_pairs_hook: Callable[[list[tuple[Any, Any]]], Any] | None = None,
         **kw: Any,
-    ) -> Any:
-        ...  # pragma: no cover
+    ) -> Any: ...  # pragma: no cover

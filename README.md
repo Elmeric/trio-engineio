@@ -13,7 +13,7 @@ Only the revision **3** of the Engine.IO protocol is supported.
 
 ## Requirements
 
-- Python 3.7+
+- Python 3.9+
 - [`trio`](https://trio.readthedocs.io/)
 - [`httpcore`](https://www.encode.io/httpcore/)
 - [`trio-websocket`](https://trio-websocket.readthedocs.io/)

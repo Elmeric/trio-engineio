@@ -9,7 +9,7 @@ How-to's and Recipes...
 ### Python Version
 
 We recommend using the latest version of Python. Trio-Engineio supports Python
-3.7.2 and newer.
+3.9.0 and newer.
 
 ### Dependencies
 
