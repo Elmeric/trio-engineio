@@ -9,12 +9,6 @@ to [Semantic Versioning].
 
 ### Miscellaneous
 
-- 
-
-## [0.2.0] - 2024-09-26
-
-### Miscellaneous
-
 - Minimum Python version is now 3.9
 - Documentation dependencies are now in a dedicated Poetry "docs" group
 
@@ -45,6 +39,7 @@ dedicated bash scripts
 - First release.
 
 [unreleased]: https://github.com/Elmeric/trio-engineio/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Elmeric/trio-engineio/compare/v0.2.0...v0.2.0
 [0.2.0]: https://github.com/Elmeric/trio-engineio/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/Elmeric/trio-engineio/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Elmeric/trio-engineio/releases/tag/v0.1.0
