@@ -5,6 +5,10 @@ to [Semantic Versioning].
 
 ## [Unreleased]
 
+### Miscellaneous
+
+- Bump black version to at lesat 24.3.0
+
 ## [0.2.0] - 2024-09-26
 
 ### Miscellaneous
