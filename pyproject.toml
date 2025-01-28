@@ -20,7 +20,7 @@ classifiers=[
 
 [tool.poetry.dependencies]
 python = "^3.9.0"
-trio = "^0.22.0"
+trio = ">=0.22,<0.29"
 httpcore = ">=0.17.1,<1.1.0"
 trio-websocket = "^0.10.2"
 typing-extensions = {version = "^4.4.0", python = "<3.8"}
