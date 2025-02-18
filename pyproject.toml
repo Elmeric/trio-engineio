@@ -40,7 +40,7 @@ trio-typing = ">=0.8,<0.11"
 pre-commit = {version = ">=3.0.4,<5.0.0"}
 invoke = "^2.0.0"
 black = {version = ">=24.3,<26.0", extras = ["colorama"]}
-isort = {version = "^5.12.0", extras = ["colors"]}
+isort = {version = ">=5.12,<7.0", extras = ["colors"]}
 
 
 [tool.poetry.group.docs.dependencies]
