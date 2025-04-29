@@ -80,7 +80,7 @@ async def main():
         try:
             await eio.connect(
                 nursery,
-                "http://192.168.0.39:3000",
+                "http://192.168.1.106:3000",
                 # "http://192.168.0.39:3000/socket.io",
                 # transports="websocket",
                 # transports=["websocket"],
